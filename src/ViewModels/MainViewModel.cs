@@ -73,6 +73,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(TestTwinkleTrayCommand))]
     private bool _isTwinkleTrayTestBusy;
+    [ObservableProperty] private bool _closeFlClashBeforeRun;
     [ObservableProperty] private bool _muteOnStart;
     [ObservableProperty] private bool _muteOnlyOnAutoRun;
     [ObservableProperty] private bool _restoreVolumeOnCompletion = true;
@@ -108,6 +109,7 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel()
     {
+        _flClashService = new FlClashService(message => AddLog(message));
         _configService = new ConfigService();
         _audioService = new AudioService();
         _aiSummaryService = new AiSummaryService();
@@ -137,12 +139,13 @@ public partial class MainViewModel : ObservableObject
 
     public bool CanEditTasks => !IsRunning;
 
-    private bool CanStartAll() => !IsRunning;
+    private bool CanStartAll() => !IsRunning && !_isCleaningUp;
 
     private bool CanStopAll() => IsRunning;
 
     partial void OnIsRunningChanged(bool value)
     {
+        StartSingleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanEditTasks));
     }
 }

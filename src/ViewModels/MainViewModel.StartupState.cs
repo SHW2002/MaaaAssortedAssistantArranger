@@ -102,6 +102,9 @@ public partial class MainViewModel
         IsSchedulePolling = false;
 
         _chainRunner?.Stop();
+        if (_startupFlClashTask is not null)
+            await _startupFlClashTask;
+        await _flClashService.RestoreAsync(cleaningUp: true);
         await StopScreenRecordingAsync();
         _screenRecordingService.Dispose();
 

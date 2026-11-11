@@ -5,6 +5,7 @@ public partial class MainViewModel
     private void SaveConfig()
     {
         _appConfig.Tasks = Tasks.Select(t => t.ToConfig()).ToList();
+        _appConfig.CloseFlClashBeforeRun = CloseFlClashBeforeRun;
         _appConfig.MuteOnStart = MuteOnStart;
         _appConfig.MuteOnlyOnAutoRun = MuteOnlyOnAutoRun;
         _appConfig.RestoreVolumeOnCompletion = RestoreVolumeOnCompletion;

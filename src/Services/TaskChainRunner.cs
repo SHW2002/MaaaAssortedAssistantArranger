@@ -6,6 +6,8 @@ namespace Game_Daily_Routine_Launcher;
 public class TaskChainRunner : IDisposable
 {
     private readonly AudioService _audio;
+    public Func<CancellationToken, Task>? BeforeTaskAsync { get; init; }
+    public Func<Task>? AfterChainAsync { get; init; }
     private readonly int _pollIntervalMs;
     private CancellationTokenSource? _cts;
     private ProcessMonitor? _currentMonitor;
@@ -25,9 +27,13 @@ public class TaskChainRunner : IDisposable
     {
         _cts = new CancellationTokenSource();
         IsRunning = true;
+        var failed = false;
 
         try
         {
+            if (BeforeTaskAsync is not null)
+                await BeforeTaskAsync(_cts.Token);
+
             if (muteOnStart)
             {
                 _audio.SetMute(true);
@@ -47,14 +53,25 @@ public class TaskChainRunner : IDisposable
         }
         catch (OperationCanceledException)
         {
+            failed = true;
             Log("任务链已被用户停止。");
+        }
+        catch (Exception ex)
+        {
+            failed = true;
+            Log($"任务链执行失败：{ex.Message}");
         }
         finally
         {
-            IsRunning = false;
+            try
+            {
+                if (AfterChainAsync is not null)
+                    await AfterChainAsync();
+            }
+            finally { IsRunning = false; }
         }
 
-        return _cts is { IsCancellationRequested: false };
+        return !failed && _cts is { IsCancellationRequested: false };
     }
 
     private async Task RunSingleTaskAsync(GameTaskConfig task, CancellationToken ct)
@@ -65,6 +82,10 @@ public class TaskChainRunner : IDisposable
             TaskStateChanged?.Invoke(task.Id, "Launching");
             await Task.Delay(task.DelayBeforeStartMs, ct);
         }
+
+        if (BeforeTaskAsync is not null)
+            await BeforeTaskAsync(ct);
+        ct.ThrowIfCancellationRequested();
 
         Log($"正在启动 {task.Name}...");
         TaskStateChanged?.Invoke(task.Id, "Running");

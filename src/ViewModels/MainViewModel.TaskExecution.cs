@@ -29,7 +29,7 @@ public partial class MainViewModel
         foreach (var task in Tasks)
             task.State = TaskState.Idle;
 
-        _chainRunner = new TaskChainRunner(_audioService, PollIntervalSeconds * 1000);
+        _chainRunner = CreateTaskChainRunner();
         _chainRunner.LogMessage += msg => AddLog(msg);
         _chainRunner.TaskStateChanged += (id, state) =>
         {
@@ -89,17 +89,19 @@ public partial class MainViewModel
         AddLog("正在停止所有任务...");
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanStartAll))]
     private async Task StartSingleAsync(GameTaskViewModel? taskVm)
     {
         if (taskVm == null)
             return;
 
         SaveConfig();
+        IsRunning = true;
         taskVm.State = TaskState.Running;
         AddLog($"单独启动 {taskVm.Name}...");
 
-        var runner = new TaskChainRunner(_audioService, PollIntervalSeconds * 1000);
+        var runner = CreateTaskChainRunner();
+        _chainRunner = runner;
         runner.LogMessage += msg => AddLog(msg);
         runner.TaskStateChanged += (id, state) =>
         {
@@ -121,6 +123,8 @@ public partial class MainViewModel
             if (screenRecordingStarted)
                 await StopScreenRecordingAsync();
             runner.Dispose();
+            _chainRunner = null;
+            IsRunning = false;
         }
     }
 }

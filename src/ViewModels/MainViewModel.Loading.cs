@@ -42,6 +42,9 @@ public partial class MainViewModel
         if (TwinkleTrayOnStart && (!TwinkleTrayOnlyOnAutoRun || App.IsAutoRun))
             StartStartupTwinkleTrayEnforcement();
 
+        if (CloseFlClashBeforeRun)
+            _startupFlClashTask = CloseStartupFlClashAsync();
+
         RefreshWebhookRelayState();
 
         _scheduleTimer.Interval = TimeSpan.FromSeconds(Math.Max(PollIntervalSeconds, 1));
@@ -51,6 +54,7 @@ public partial class MainViewModel
 
     private void LoadBasicConfig()
     {
+        CloseFlClashBeforeRun = _appConfig.CloseFlClashBeforeRun;
         MuteOnStart = _appConfig.MuteOnStart;
         MuteOnlyOnAutoRun = _appConfig.MuteOnlyOnAutoRun;
         RestoreVolumeOnCompletion = _appConfig.RestoreVolumeOnCompletion;
