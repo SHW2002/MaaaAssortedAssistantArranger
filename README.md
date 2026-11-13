@@ -34,11 +34,11 @@ Each task's **配置** button opens its settings:
 | Monitored process | Process name, with or without `.exe`; the task waits for it to appear and exit. An empty value completes immediately after launch, except when UDP proxying is enabled. |
 | Delay | Milliseconds to wait before launching the task. |
 | Timeout | Maximum minutes to wait for the monitored process. A failed or timed-out task does not prevent subsequent tasks from running. |
-| UDP proxy | Off by default. Configure exact target `.exe` filenames and an unauthenticated SOCKS5 endpoint. Administrator privileges and the Windows Packet Filter driver are required. |
+| UDP proxy | Off by default. Game presets select target processes automatically; other tasks follow the monitored process. Optional exact `.exe` filenames override automatic selection. Configure an unauthenticated SOCKS5 endpoint. Administrator privileges and the Windows Packet Filter driver are required. |
 
 Only enabled tasks participate in a chain. A failed task makes the chain unsuccessful, preventing success-only shutdown and summaries.
 
-For Star Rail, an example UDP target is `StarRail.exe`, the monitored process can be `StarRail`, and the upstream is the actual FlClash SOCKS5/mixed port, for example `127.0.0.1:7890`. Keep FlClash running and disable **运行前关闭 FlClash** for this setup.
+For Star Rail, leave **自定义(可空)** empty: the preset targets `StarRail.exe` automatically. The monitored process can be `StarRail`, and the upstream is the actual FlClash SOCKS5/mixed port, for example `127.0.0.1:7890`. **生效进程** previews the exact targets. Keep FlClash running and disable **运行前关闭 FlClash** for this setup.
 
 ### Scheduling and quiet operation
 

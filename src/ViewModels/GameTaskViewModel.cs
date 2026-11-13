@@ -10,7 +10,7 @@ public partial class GameTaskViewModel : ObservableObject
     private static readonly HashSet<string> NonConfigProperties =
     [
         nameof(State), nameof(StateText), nameof(IsConfigExpanded),
-        nameof(ValidationMessage), nameof(HasValidationError)
+        nameof(ValidationMessage), nameof(HasValidationError), nameof(UdpProxyProcessPreview)
     ];
 
     private readonly GameTaskConfig _config;

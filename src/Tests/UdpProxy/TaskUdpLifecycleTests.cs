@@ -3,6 +3,22 @@ namespace Game_Daily_Routine_Launcher.Tests;
 public class TaskUdpLifecycleTests
 {
     [Fact]
+    public async Task AutomaticTargetsAreReportedInLogsInsteadOfTheEmptyOverride()
+    {
+        var fake = new TaskFakes();
+        fake.ProcessExit.SetResult();
+        var task = TaskFakes.Config();
+        task.Id = "march7th";
+        task.UdpProxy.ProcessNames = string.Empty;
+        var messages = new List<string>();
+        using var runner = fake.Runner();
+        runner.LogMessage += messages.Add;
+        Assert.True(await runner.RunChainAsync([task], false));
+        var target = UdpProxyRules.BuildArguments(task).Last();
+        Assert.Contains($"UDP 代理已就绪，仅匹配：{target}。", messages);
+    }
+
+    [Fact]
     public async Task DisabledTasksPreserveNormalLaunchWithoutStartingProxy()
     {
         var fake = new TaskFakes();

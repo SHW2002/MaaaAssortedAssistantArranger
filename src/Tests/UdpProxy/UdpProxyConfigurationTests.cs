@@ -16,14 +16,13 @@ public class UdpProxyConfigurationTests
     }
 
     [Theory]
-    [InlineData("")]
     [InlineData("*")]
     [InlineData("*.exe")]
     [InlineData("C:\\Games\\StarRail.exe")]
     [InlineData("ProxiFyre.exe")]
     [InlineData("StarRail")]
     [InlineData(".exe")]
-    [InlineData(" ")]
+    [InlineData(" ; , ")]
     public void RejectsCatchAllDirectoryWildcardAndEngineTargets(string targets)
     {
         var task = TaskFakes.Config();

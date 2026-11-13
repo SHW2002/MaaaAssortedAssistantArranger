@@ -23,7 +23,7 @@ public partial class TaskChainRunner
                 Log($"正在为 {task.Name} 启动 UDP 代理...");
                 proxy = await _udpProxy.StartAsync(task, ct);
                 if (proxy.Exited.IsCompleted) throw new InvalidOperationException("UDP 代理已意外退出。");
-                Log($"UDP 代理已就绪，仅匹配：{task.UdpProxy.ProcessNames}。");
+                Log($"UDP 代理已就绪，仅匹配：{string.Join(", ", UdpProxyRules.Validate(task))}。");
             }
             ct.ThrowIfCancellationRequested();
             if (!string.IsNullOrWhiteSpace(task.GameProcessName))

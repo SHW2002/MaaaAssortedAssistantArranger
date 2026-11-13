@@ -10,11 +10,27 @@ MAAA ships `components/udp/MaaaUdpProxy.exe`, compiled from the vendored open-so
 2. Open a task's configuration and enable **为此任务启用 UDP 代理**.
 3. Click **准备 UDP 组件**. After your confirmation, MAAA downloads the official Windows Packet Filter x64 MSI, verifies its pinned SHA-256, and installs it if a compatible driver is absent. Adapter installation can briefly reconnect the network; a required reboot is reported, never forced.
 4. Keep a SOCKS5 upstream running. For FlClash, enter its actual mixed/SOCKS5 listening host and port; the example `127.0.0.1:7890` is only a default.
-5. Enter exact target executable filenames, for example `StarRail.exe`. Separate several names with commas, semicolons, or newlines. Matching applies to every instance with that exact filename; directories, wildcards, and automatic child-process inheritance are unsupported.
+5. Leave **自定义(可空)** empty to use automatic game presets, or the monitored process for other tasks. Check **生效进程** for the exact selection. To override it, enter complete executable filenames separated by commas or semicolons. Existing multiline overrides remain supported. Matching applies to every instance with that exact filename; directories, wildcards, and automatic child-process inheritance are unsupported.
 6. Set the task's monitored process to a process that stays alive for the whole operation (`StarRail` for directly monitoring the game), and set a positive timeout. Close existing target processes before starting.
 7. When using a local FlClash upstream, disable **运行前关闭 FlClash**. Conflicting task chains are rejected before the close hook; loading such a configuration also skips the startup close.
 
 For unattended use, configure the existing Windows scheduled task to run MAAA with highest privileges. The system proxy itself need not be enabled if the configured SOCKS5 listener remains available.
+
+## Automatic process selection
+
+An explicit custom list takes precedence. With an empty list, MAAA recognizes built-in task IDs, known game monitor names, or task names containing the game/assistant name. It uses these presets:
+
+| Game | UDP target |
+| --- | --- |
+| Honkai: Star Rail / March7th | `StarRail.exe` |
+| Zenless Zone Zero | `ZenlessZoneZero.exe` |
+| Genshin Impact / BetterGI | `YuanShen.exe`; `GenshinImpact.exe` when that is the monitored process |
+| Arknights: Endfield / MaaEnd | `Endfield.exe` |
+| Wuthering Waves / ok-ww | `Client-Win64-Shipping.exe` (the game, rather than its launcher) |
+
+Other tasks use the monitored process, adding `.exe` if needed. Arknights has no universal emulator preset, so its configured monitor determines the target. Filenames containing dots are preserved. An empty monitor still fails lifecycle validation; automatic selection never selects all processes. Presets and custom lists both match every same-named instance, including other applications using the same executable filename.
+
+Automatic targets are resolved when needed, without writing them into the custom field. Existing empty configurations work immediately, changing the monitor updates the fallback, and clearing a custom override restores automatic mode. The preview, engine arguments, and startup log use the same selection.
 
 ## Task lifecycle
 

@@ -17,9 +17,7 @@ public static class UdpProxyRules
             throw new InvalidOperationException("启用 UDP 代理时，必须配置有效的监控进程名。");
         if (task.TimeoutMinutes <= 0)
             throw new InvalidOperationException("启用 UDP 代理时，超时必须大于 0 分钟。");
-        var names = (config.ProcessNames ?? string.Empty).Split(['\r', '\n', ';', ','],
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var names = UdpProxyProcessResolver.Resolve(task).ProcessNames;
         if (names.Length == 0 || names.Any(name => name.Length > 255 ||
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
             !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
