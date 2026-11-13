@@ -16,6 +16,7 @@ public partial class MainViewModel
         var closeFlClash = CloseFlClashBeforeRun;
         return new TaskChainRunner(_audioService, PollIntervalSeconds * 1000)
         {
+            ValidateTasks = tasks => UdpProxyRules.ValidateUpstreamCompatibility(tasks, closeFlClash),
             BeforeTaskAsync = async ct =>
             {
                 if (_startupFlClashTask is not null)

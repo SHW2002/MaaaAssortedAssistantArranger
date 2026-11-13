@@ -1,0 +1,3 @@
+# Preserve upstream source and license formatting when vendoring dependencies.
+src/Native/UdpProxy/third_party/** -whitespace
+docs/third-party/*-LICENSE.txt -whitespace

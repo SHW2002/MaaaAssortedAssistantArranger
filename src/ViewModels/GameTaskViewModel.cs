@@ -79,6 +79,7 @@ public partial class GameTaskViewModel : ObservableObject
         _launchMode = config.LaunchMode;
         _delayBeforeStartMs = config.DelayBeforeStartMs;
         _timeoutMinutes = config.TimeoutMinutes;
+        LoadUdpProxy(config.UdpProxy);
 
         Validate();
     }
@@ -119,6 +120,8 @@ public partial class GameTaskViewModel : ObservableObject
             else
                 ClearValidation();
         }
+        if (!HasValidationError)
+            ValidateUdpProxy();
     }
 
     private void SetValidation(string message)
@@ -164,6 +167,7 @@ public partial class GameTaskViewModel : ObservableObject
         _config.LaunchMode = LaunchMode;
         _config.DelayBeforeStartMs = DelayBeforeStartMs;
         _config.TimeoutMinutes = TimeoutMinutes;
+        _config.UdpProxy = BuildUdpProxyConfig();
         return _config;
     }
 }

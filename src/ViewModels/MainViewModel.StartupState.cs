@@ -82,8 +82,6 @@ public partial class MainViewModel
         }
     }
 
-    public Task CleanupAsync() => _cleanupTask ??= CleanupCoreAsync();
-
     private async Task RestoreConfiguredStateAsync()
     {
         if (RestoreVolumeOnCompletion)
@@ -91,28 +89,6 @@ public partial class MainViewModel
 
         if (RestoreBrightnessOnCompletion)
             await RestoreOriginalTwinkleTrayStateAsync();
-    }
-
-    private async Task CleanupCoreAsync()
-    {
-        _isCleaningUp = true;
-        _scheduleTimer.Stop();
-        _startupMuteTimer.Stop();
-        _startupTwinkleTrayTimer.Stop();
-        IsSchedulePolling = false;
-
-        _chainRunner?.Stop();
-        if (_startupFlClashTask is not null)
-            await _startupFlClashTask;
-        await _flClashService.RestoreAsync(cleaningUp: true);
-        await StopScreenRecordingAsync();
-        _screenRecordingService.Dispose();
-
-        if (_startupTwinkleTrayTask is not null)
-            await _startupTwinkleTrayTask;
-
-        await _webhookRelayService.StopAsync();
-        await RestoreConfiguredStateAsync();
     }
 
     private void RestoreOriginalMuteState()

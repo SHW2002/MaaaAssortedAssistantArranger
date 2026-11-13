@@ -49,6 +49,18 @@ public class ProcessMonitor : IDisposable
         WaitForMonitorTask(monitorTask);
     }
 
+    public async Task StopAsync()
+    {
+        Task? monitorTask;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _cts.Cancel();
+            monitorTask = _monitorTask;
+        }
+        if (monitorTask is not null) await monitorTask.ConfigureAwait(false);
+    }
+
     private async Task MonitorLoop(CancellationToken ct)
     {
         var wasRunning = false;
@@ -86,7 +98,9 @@ public class ProcessMonitor : IDisposable
     {
         try
         {
-            return Process.GetProcessesByName(_processName).Length > 0;
+            var processes = Process.GetProcessesByName(_processName);
+            try { return processes.Length > 0; }
+            finally { foreach (var process in processes) process.Dispose(); }
         }
         catch
         {

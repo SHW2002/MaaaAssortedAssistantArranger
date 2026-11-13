@@ -9,6 +9,7 @@ public partial class MainViewModel : ObservableObject
     private static readonly HashSet<string> NonConfigProperties =
     [
         nameof(IsRunning),
+        nameof(IsPreparingUdpProxy),
         nameof(IsMuted),
         nameof(TestAutoMuteButtonText),
         nameof(TestTwinkleTrayButtonText),
@@ -137,14 +138,15 @@ public partial class MainViewModel : ObservableObject
 
     public bool CanRunRecentAiSummaryTest => !IsTestingAiSummary && HasRecentAiSummaryPromptLog;
 
-    public bool CanEditTasks => !IsRunning;
+    public bool CanEditTasks => !IsRunning && !IsPreparingUdpProxy;
 
-    private bool CanStartAll() => !IsRunning && !_isCleaningUp;
+    private bool CanStartAll() => !IsRunning && !IsPreparingUdpProxy && !_isCleaningUp;
 
     private bool CanStopAll() => IsRunning;
 
     partial void OnIsRunningChanged(bool value)
     {
+        PrepareUdpProxyCommand.NotifyCanExecuteChanged();
         StartSingleCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanEditTasks));
     }

@@ -1,0 +1,15 @@
+<Project>
+  <ItemGroup>
+    <UdpNativeSources Include="$(MSBuildProjectDirectory)\src\Native\UdpProxy\**\*.cpp;
+                               $(MSBuildProjectDirectory)\src\Native\UdpProxy\**\*.h;
+                               $(MSBuildProjectDirectory)\src\Native\UdpProxy\CMakeLists.txt;
+                               $(MSBuildProjectDirectory)\src\Native\UdpProxy\third_party\gsl\include\**\*" />
+  </ItemGroup>
+  <Target Name="BuildBuiltinUdpProxy" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="@(UdpNativeSources)"
+          Outputs="$(MSBuildProjectDirectory)\artifacts\native-udp\Release\MaaaUdpProxy.exe">
+    <Exec Command="cmake -S &quot;$(MSBuildProjectDirectory)\src\Native\UdpProxy&quot; -B &quot;$(MSBuildProjectDirectory)\artifacts\native-udp&quot; -G &quot;Visual Studio 17 2022&quot; -A x64" />
+    <Exec Command="cmake --build &quot;$(MSBuildProjectDirectory)\artifacts\native-udp&quot; --config Release --parallel 2" />
+  </Target>
+</Project>

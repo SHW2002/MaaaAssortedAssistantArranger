@@ -1,0 +1,1220 @@
+#pragma once
+
+#include "owner_module_resolver.h"
+#include "owner_memo.h"
+
+namespace iphelper
+{
+    /**
+     * @brief The identity of a process that owns network connections: process ID, name,
+     *        executable path, and device path. All string fields are converted to uppercase for
+     *        consistent matching.
+     *
+     * This is what enriching one owner-module table row yields, and what every row of the same
+     * (PID, service tag) in one captured table shares through the owner memo (owner_memo.h). It
+     * is immutable once constructed. Routing state is deliberately not part of it: each row's
+     * network_process carries its own.
+     */
+    struct owner_identity
+    {
+        /// Converts a DOS drive path to its device path; empty when it cannot be converted.
+        using device_path_converter = std::wstring (*)(const std::wstring& path);
+
+        /**
+         * @brief Default constructor.
+         */
+        owner_identity() = default;
+
+        /**
+         * @brief Constructs an owner_identity with the specified information.
+         *
+         * @param id Process ID
+         * @param name Process name (will be converted to uppercase)
+         * @param path Full path to the process executable (will be converted to uppercase)
+         * @param resolved Whether the process owner was resolved from the system connection table
+         *
+         * @note All string parameters are automatically converted to uppercase and the
+         *       device path is computed from the provided path with convert_to_device_path().
+         */
+        owner_identity(const unsigned long id, std::wstring name, std::wstring path,
+            const bool resolved = true)
+            : owner_identity(id, std::move(name), std::move(path), &convert_to_device_path, resolved)
+        {
+        }
+
+        /**
+         * @brief Constructs an owner_identity whose device path is computed by @p convert.
+         *
+         * process_lookup passes its Source's conversion (the Windows one for the production
+         * source), so that the completeness of the device path, and with it whether the identity
+         * is memoizable (has_complete_device_path()), is decided by this type for any conversion.
+         */
+        owner_identity(const unsigned long id, std::wstring name, std::wstring path,
+            const device_path_converter convert, const bool resolved = true)
+            : name(std::move(name)),
+            path_name(std::move(path)),
+            device_path_name(convert(path_name)),
+            id(id),
+            resolved(resolved)
+        {
+            this->name = to_upper(this->name);
+            this->path_name = to_upper(this->path_name);
+            this->device_path_name = to_upper(this->device_path_name);
+        }
+
+        /**
+         * @brief Validates that a wide string pointer is non-null and non-empty.
+         *
+         * @param ptr_str Pointer to wide string to validate
+         * @return true if the string is valid (non-null and non-empty), false otherwise
+         */
+        static bool is_valid_wide_string(const wchar_t* ptr_str) {
+            return ptr_str != nullptr && ptr_str[0] != L'\0';
+        }
+
+        /**
+         * @brief Converts a DOS path to its corresponding device path.
+         *
+         * Converts paths like "C:\Windows\System32\notepad.exe" to device paths like
+         * "\Device\HarddiskVolume3\Windows\System32\notepad.exe". This is useful for
+         * kernel-level path matching and avoiding drive letter ambiguities.
+         *
+         * @param path DOS path to convert (must start with drive letter, e.g., "C:")
+         * @return Device path string, or empty string on failure
+         *
+         * @note Uses QueryDosDeviceW internally with automatic buffer growth
+         * @note Handles MULTI_SZ return values by taking only the first device name
+         * @note Has a hard limit of 64KB buffer size to prevent excessive memory usage
+         */
+        static std::wstring convert_to_device_path(const std::wstring& path)
+        {
+            if (!is_valid_wide_string(path.c_str()) || path.size() < 2 || path[1] != L':')
+                return L"";
+
+            const wchar_t drive_letter[3] = { path[0], path[1], L'\0' };
+
+            // QueryDosDeviceW can require > MAX_PATH and returns a MULTI_SZ list; we use only the first.
+            DWORD cap = 256;
+            std::wstring buf;
+            for (;;) {
+                buf.resize(cap);
+                const DWORD got = QueryDosDeviceW(drive_letter, buf.data(), cap);
+                if (got != 0) {
+                    // Trim to first NUL (MULTI_SZ may have more)
+                    buf.resize(wcslen(buf.c_str()));
+                    break;
+                }
+                if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+                    return L"";
+                }
+                cap *= 2;
+                if (cap > 1u << 16) // 64K hard stop
+                    return L"";
+            }
+
+            std::wstring device_path = buf;
+            device_path += path.substr(2);
+            return device_path;
+        }
+
+        /**
+         * @brief Converts a string to uppercase.
+         *
+         * @param str Input string to convert
+         * @return Uppercase version of the input string
+         *
+         * @note Uses std::ranges::transform with ::towupper for Unicode-aware conversion
+         */
+        static std::wstring to_upper(const std::wstring& str) {
+            std::wstring upper_case;
+            std::ranges::transform(str, std::back_inserter(upper_case), ::towupper);
+            return upper_case;
+        }
+
+        /// Service names need no device path; a DOS drive path with no conversion is partial.
+        [[nodiscard]] bool has_complete_device_path() const noexcept
+        {
+            return path_name.size() < 2 || path_name[1] != L':' || !device_path_name.empty();
+        }
+
+        std::wstring name;                  ///< Process name (uppercase)
+        std::wstring path_name;             ///< Full path to executable (uppercase)
+        std::wstring device_path_name;      ///< Device path version of path_name (uppercase)
+        unsigned long id{};                 ///< Process ID
+        bool resolved{ true };              ///< True when the owning process was resolved successfully
+    };
+
+    /**
+     * @brief Represents a network process with associated module information.
+     *
+     * One network_process is published for each connection-table row: its identity
+     * (owner_identity, possibly copied from an enrichment shared with other rows of the same
+     * process in the same capture) plus the routing state the packet handlers cache for this row.
+     * The routing state is per row, so a decision cached while routing one connection never
+     * applies to another, including after the proxy configuration changes at runtime.
+     */
+    struct network_process : owner_identity  // NOLINT(clang-diagnostic-padded)
+    {
+        /**
+         * @brief Default constructor.
+         */
+        network_process() = default;
+
+        /**
+         * @brief Constructs a network_process with the specified information (see owner_identity).
+         */
+        network_process(const unsigned long id, std::wstring name, std::wstring path,
+            const bool resolved = true)
+            : owner_identity(id, std::move(name), std::move(path), resolved)
+        {
+        }
+
+        /**
+         * @brief A row's own owner object for an identity: the identity is copied, the routing
+         *        state starts fresh.
+         */
+        explicit network_process(const owner_identity& identity)
+            : owner_identity(identity)
+        {
+        }
+
+        std::optional<uint16_t> tcp_proxy_port = std::nullopt; // Optional TCP proxy port if the process is associated with a proxy
+        std::optional<uint16_t> udp_proxy_port = std::nullopt; // Optional UDP proxy port if the process is associated with a proxy
+        // These cache flags can be set from match_owner_to_app()/route_owner() running on
+        // multiple threads for the same process, so they are atomic to avoid a data race
+        // (the writes are idempotent 'true' stores; relaxed ordering would suffice).
+        std::atomic<bool> excluded{ false };    ///< Whether the process is excluded from proxying
+        std::atomic<bool> bypass_tcp{ false };  ///< Whether TCP connections should bypass proxying (no proxy configured)
+        std::atomic<bool> bypass_udp{ false };  ///< Whether UDP connections should bypass proxying (no proxy configured)
+    };
+
+    /**
+     * @brief The operating-system services process_lookup builds its tables from.
+     *
+     * process_lookup takes this as a defaulted template argument so that the native tests can
+     * substitute deterministic connection tables, owner resolution, and device-path conversion
+     * while the production table ingestion and enrichment code runs unchanged. Production code
+     * always uses this type.
+     */
+    struct system_ownership_source
+    {
+        static DWORD get_extended_tcp_table(const PVOID buffer, const PDWORD size, const BOOL order,
+            const ULONG family, const TCP_TABLE_CLASS table_class, const ULONG reserved) noexcept
+        {
+            return ::GetExtendedTcpTable(buffer, size, order, family, table_class, reserved);
+        }
+
+        static DWORD get_extended_udp_table(const PVOID buffer, const PDWORD size, const BOOL order,
+            const ULONG family, const UDP_TABLE_CLASS table_class, const ULONG reserved) noexcept
+        {
+            return ::GetExtendedUdpTable(buffer, size, order, family, table_class, reserved);
+        }
+
+        static owner_module_resolver::extended_result resolve_from_pid_and_tag_extended(const DWORD pid,
+            const DWORD service_tag)
+        {
+            return owner_module_resolver::resolve_from_pid_and_tag_extended(pid, service_tag);
+        }
+
+        static bool resolve_from_pid_and_tag(const DWORD pid, const DWORD service_tag,
+            owner_module_resolver::result& out)
+        {
+            return owner_module_resolver::resolve_from_pid_and_tag(pid, service_tag, out);
+        }
+
+        /// The device path of an owner's DOS drive path (owner_identity::convert_to_device_path,
+        /// i.e. QueryDosDeviceW); empty when the conversion fails, which keeps the owner usable
+        /// for its row but not memoizable.
+        static std::wstring convert_to_device_path(const std::wstring& path)
+        {
+            return owner_identity::convert_to_device_path(path);
+        }
+
+        /// Identities enriched while ingesting one captured table (see owner_memo).
+        template <class Process>
+        using owner_memo_type = owner_memo<Process>;
+    };
+
+    /// Declared only so process_lookup can befriend it: the native tests define it to observe
+    /// how published tables are replaced and retired. Production code never defines or uses it.
+    struct process_lookup_test_access;
+
+    /**
+     * @brief Maps TCP/UDP network connections to their owning processes using IP Helper API.
+     *
+     * This class provides efficient lookup of process information for network connections
+     * by maintaining hash tables of TCP and UDP sessions mapped to their owning processes.
+     * It includes a protected apps cache for processes that couldn't be resolved initially
+     * (typically system processes) to avoid repeated expensive lookups.
+     *
+     * Key features:
+     * - Thread-safe operations with reader-writer locks
+     * - Protected apps cache with automatic expiration
+     * - Support for both IPv4 and IPv6 connections
+     * - Integration with owner_module_resolver for robust process resolution
+     * - Comprehensive logging and debugging support
+     * - Fallback mechanisms for service tag resolution
+     *
+     * @tparam T IP address type (net::ip_address_v4 or net::ip_address_v6)
+     * @tparam Source Connection tables, owner resolution, and device-path conversion
+     *         (system_ownership_source; tests only substitute a deterministic source)
+     *
+     * @note Designed as a non-copyable, non-movable class to ensure singleton-like behavior
+     */
+    template <typename T, typename Source = system_ownership_source>
+    class process_lookup final : public netlib::log::logger<process_lookup<T, Source>>
+    {
+        using log_level = netlib::log::log_level;
+
+        /// Timeout for protected apps cache entries (2 seconds)
+        static constexpr std::chrono::seconds protected_apps_cache_timeout{ 2 };
+
+        /// Initial buffer size for TCP/UDP table queries (128KB should handle most systems)
+        static constexpr DWORD initial_buffer_size{ 131072 };
+
+        /// Hash table type for TCP sessions
+        using tcp_hashtable_t = std::unordered_map<net::ip_session<T>, std::shared_ptr<network_process>>;
+        /// Hash table type for UDP endpoints
+        using udp_hashtable_t = std::unordered_map<net::ip_endpoint<T>, std::shared_ptr<network_process>>;
+
+        /// Protected TCP sessions cache (sessions that couldn't be resolved)
+        using tcp_protected_t = std::unordered_map<net::ip_session<T>, std::chrono::time_point<std::chrono::steady_clock>>;
+        /// Protected UDP sessions cache (endpoints that couldn't be resolved)
+        using udp_protected_t = std::unordered_map<net::ip_endpoint<T>, std::chrono::time_point<std::chrono::steady_clock>>;
+
+        // A completed table is published by swapping it with the current one under the table's
+        // reader lock (initialize_tcp_table/initialize_udp_table); that swap must not throw.
+        static_assert(std::is_nothrow_swappable_v<tcp_hashtable_t>);
+        static_assert(std::is_nothrow_swappable_v<udp_hashtable_t>);
+
+        friend struct process_lookup_test_access;
+
+    public:
+        /**
+         * @brief Constructs a process_lookup instance with specified logging configuration.
+         *
+         * Initializes the internal hash tables by querying the current TCP and UDP
+         * connection tables from the operating system.
+         *
+         * @param log_level Minimum log level for output
+         * @param log_stream Optional output stream for log messages
+         */
+        explicit process_lookup(const log_level log_level = log_level::error,
+            std::shared_ptr<std::ostream> log_stream = nullptr)
+            : netlib::log::logger<process_lookup>(log_level, std::move(log_stream))
+        {
+            // The shared default represents any connection whose owner could not be resolved
+            // (including protected, elevated, system, and other-user processes). Keep that
+            // state explicit so callers can choose a fail-safe direct-routing policy without
+            // conflating it with a genuinely resolved process named SYSTEM.
+            default_process_ = std::make_shared<network_process>(0, L"SYSTEM", L"SYSTEM", false);
+            initialize_tcp_table();
+            initialize_udp_table();
+        }
+
+        // Disable copy and move operations to ensure singleton-like behavior
+        process_lookup(const process_lookup&) = delete;
+        process_lookup(process_lookup&&) noexcept = delete;
+        process_lookup& operator=(const process_lookup&) = delete;
+        process_lookup& operator=(process_lookup&&) noexcept = delete;
+
+        /**
+         * @brief Default destructor.
+         */
+        ~process_lookup() = default;
+
+    private:
+        // Core data structures
+        tcp_hashtable_t  tcp_to_app_;           ///< TCP sessions to process mapping
+        udp_hashtable_t  udp_to_app_;           ///< UDP endpoints to process mapping
+        mutable std::shared_mutex tcp_to_app_mutex_;    ///< Reader-writer lock for TCP hash table (mutable: locked by const readers)
+        mutable std::shared_mutex udp_to_app_mutex_;    ///< Reader-writer lock for UDP hash table
+
+        // Protected apps cache (for processes that couldn't be resolved)
+        tcp_protected_t tcp_protected_apps_;        ///< TCP sessions with unresolvable processes
+        udp_protected_t udp_protected_apps_;        ///< UDP endpoints with unresolvable processes
+        std::mutex      tcp_protected_apps_lock_;   ///< Mutex for TCP protected apps
+        std::mutex      udp_protected_apps_lock_;   ///< Mutex for UDP protected apps
+
+        /// Default process object for unresolvable processes
+        std::shared_ptr<network_process> default_process_;
+
+        // Buffer management for IP Helper API calls
+        std::unique_ptr<char[]> table_buffer_tcp_{ std::make_unique<char[]>(initial_buffer_size) };  ///< Buffer for TCP table queries (pre-allocated to 128KB)
+        std::unique_ptr<char[]> table_buffer_udp_{ std::make_unique<char[]>(initial_buffer_size) };  ///< Buffer for UDP table queries (pre-allocated to 128KB)
+        std::mutex table_buffer_tcp_lock_;                                                           ///< Mutex for TCP buffer access
+        std::mutex table_buffer_udp_lock_;                                                           ///< Mutex for UDP buffer access
+        DWORD table_buffer_size_tcp_{ initial_buffer_size };                                         ///< Current TCP buffer size
+        DWORD table_buffer_size_udp_{ initial_buffer_size };                                         ///< Current UDP buffer size
+
+    public:
+        /**
+         * @brief Looks up the process associated with a TCP session.
+         *
+         * Performs a fast hash table lookup to find the process that owns a specific
+         * TCP connection. If not found, checks the protected apps cache to avoid
+         * repeated expensive lookups for system processes.
+         *
+         * @tparam SetToDefault If true, adds unresolvable sessions to protected cache
+         * @tparam UpdateProtected If true, updates timestamp for protected sessions
+         *
+         * @param session TCP session to look up
+         * @return Shared pointer to network_process if found, nullptr if SetToDefault=false and not found
+         *
+         * @note Thread-safe operation using reader-writer locks
+         * @note Protected sessions automatically expire after 2 seconds
+         */
+        template <bool SetToDefault, bool UpdateProtected = true>
+        std::shared_ptr<network_process> lookup_process_for_tcp(const net::ip_session<T>& session)
+        {
+            {
+                std::shared_lock lock(tcp_to_app_mutex_);
+                if (auto it = tcp_to_app_.find(session); it != tcp_to_app_.end())
+                    return it->second;
+            }
+
+            const auto now = std::chrono::steady_clock::now();
+
+            std::unique_lock lock(tcp_protected_apps_lock_);
+            if (auto it = tcp_protected_apps_.find(session); it != tcp_protected_apps_.end()) {
+                if (now - it->second > protected_apps_cache_timeout) {
+                    tcp_protected_apps_.erase(it);
+                }
+                else {
+                    if constexpr (UpdateProtected) {
+                        it->second = now;
+                    }
+                    return default_process_;
+                }
+            }
+
+            if constexpr (SetToDefault) {
+                tcp_protected_apps_.try_emplace(session, now);
+                return default_process_;
+            }
+            else {
+                return nullptr;
+            }
+        }
+
+        /**
+         * @brief Looks up the process associated with a UDP endpoint.
+         *
+         * Performs a fast hash table lookup to find the process that owns a specific
+         * UDP endpoint. Also checks for wildcard bindings (0.0.0.0:port) if the
+         * specific endpoint is not found.
+         *
+         * @tparam SetToDefault If true, adds unresolvable endpoints to protected cache
+         * @tparam UpdateProtected If true, updates timestamp for protected endpoints
+         *
+         * @param endpoint UDP endpoint to look up
+         * @return Shared pointer to network_process if found, nullptr if SetToDefault=false and not found
+         *
+         * @note Thread-safe operation using reader-writer locks
+         * @note Handles wildcard UDP bindings (0.0.0.0:port format)
+         * @note Protected endpoints automatically expire after 2 seconds
+         */
+        template <bool SetToDefault, bool UpdateProtected = true>
+        std::shared_ptr<network_process> lookup_process_for_udp(const net::ip_endpoint<T>& endpoint)
+        {
+            // UDP endpoints may have 0.0.0.0:137 form
+            auto zero_ip_endpoint = endpoint;
+            zero_ip_endpoint.ip = T{};
+
+            {
+                std::shared_lock lock(udp_to_app_mutex_);
+                if (auto it = udp_to_app_.find(endpoint); it != udp_to_app_.end())
+                    return it->second;
+                if (auto it = udp_to_app_.find(zero_ip_endpoint); it != udp_to_app_.end())
+                    return it->second;
+            }
+
+            const auto now = std::chrono::steady_clock::now();
+
+            std::unique_lock lock(udp_protected_apps_lock_);
+            if (auto it = udp_protected_apps_.find(endpoint); it != udp_protected_apps_.end()) {
+                if (now - it->second > protected_apps_cache_timeout) {
+                    udp_protected_apps_.erase(it);
+                }
+                else {
+                    if constexpr (UpdateProtected) {
+                        it->second = now;
+                    }
+                    return default_process_;
+                }
+            }
+
+            if constexpr (SetToDefault) {
+                udp_protected_apps_.try_emplace(endpoint, now);
+                return default_process_;
+            }
+            else {
+                return nullptr;
+            }
+        }
+
+        /**
+         * @brief Updates the internal hash tables with current system state.
+         *
+         * Refreshes the TCP and/or UDP connection tables by querying the operating
+         * system's current network connection state. Also performs cleanup of
+         * expired protected app cache entries.
+         *
+         * @param tcp Whether to update TCP connection table
+         * @param udp Whether to update UDP connection table
+         * @return true if all requested updates succeeded, false if any failed
+         *
+         * @note This is an expensive operation that should not be called frequently
+         * @note Automatically cleans up expired protected app cache entries
+         */
+        bool actualize(const bool tcp, const bool udp)
+        {
+            auto ret_tcp = true, ret_udp = true;
+
+            if (tcp) ret_tcp = initialize_tcp_table();
+            if (udp) ret_udp = initialize_udp_table();
+
+            const auto now = std::chrono::steady_clock::now();
+
+            {
+                std::unique_lock lock(udp_protected_apps_lock_);
+                for (auto it = udp_protected_apps_.begin(); it != udp_protected_apps_.end(); ) {
+                    if (now - it->second > protected_apps_cache_timeout)
+                        it = udp_protected_apps_.erase(it);
+                    else
+                        ++it;
+                }
+            }
+            {
+                std::unique_lock lock(tcp_protected_apps_lock_);
+                for (auto it = tcp_protected_apps_.begin(); it != tcp_protected_apps_.end(); ) {
+                    if (now - it->second > protected_apps_cache_timeout)
+                        it = tcp_protected_apps_.erase(it);
+                    else
+                        ++it;
+                }
+            }
+
+            return (ret_udp && ret_tcp);
+        }
+
+        /**
+         * @brief Generates a string dump of the TCP connection table.
+         *
+         * Creates a human-readable representation of all TCP connections and their
+         * associated processes for debugging and monitoring purposes.
+         *
+         * @return String containing formatted TCP connection information
+         *
+         * @note Thread-safe operation with read lock
+         * @note Format: "local_ip:port <---> remote_ip:port : pid : process_name"
+         */
+        std::string dump_tcp_table()
+        {
+            std::ostringstream oss;
+            std::shared_lock lock(tcp_to_app_mutex_);
+            for (const auto& entry : tcp_to_app_) {
+                oss << std::string(entry.first.local.ip) << " : " << entry.first.local.port
+                    << " <---> " << std::string(entry.first.remote.ip) << " : " << entry.first.remote.port
+                    << " : " << entry.second->id << " : "
+                    << tools::strings::to_string(entry.second->name) << '\n';
+            }
+            return oss.str();
+        }
+
+        /**
+         * @brief Retrieves TCP sessions belonging to processes matching a regex pattern.
+         *
+         * @param process Regular expression to match against process names
+         * @return Vector of TCP sessions owned by matching processes
+         *
+         * @note Thread-safe operation with read lock
+         * @note Performs case-sensitive regex matching against uppercase process names
+         */
+        std::vector<net::ip_session<T>> get_tcp_sessions_for_process(const std::wregex& process)
+        {
+            std::vector<net::ip_session<T>> sessions;
+            std::shared_lock lock(tcp_to_app_mutex_);
+            for (const auto& entry : tcp_to_app_) {
+                if (std::regex_match(entry.second->name, process))
+                    sessions.push_back(entry.first);
+            }
+            return sessions;
+        }
+
+        /**
+         * @brief Retrieves all TCP sessions.
+         *
+         * This function returns a vector containing all TCP sessions currently stored in the TCP hashtable.
+         * It reserves memory for the vector to avoid multiple allocations, improving performance.
+         *
+         * @return A vector of net::ip_session<T> objects representing all TCP sessions.
+         */
+        std::vector<net::ip_session<T>> get_all_tcp_sessions() const
+        {
+            std::vector<net::ip_session<T>> sessions;
+
+            std::shared_lock lock(tcp_to_app_mutex_); // Guard concurrent access like the other readers
+            sessions.reserve(tcp_to_app_.size()); // Reserve memory to avoid multiple allocations
+
+            for (const auto& entry : tcp_to_app_)
+            {
+                sessions.push_back(entry.first);
+            }
+
+            return sessions;
+        }
+
+        /**
+         * @brief Generates a string dump of the UDP endpoint table.
+         *
+         * Creates a human-readable representation of all UDP endpoints and their
+         * associated processes for debugging and monitoring purposes.
+         *
+         * @return String containing formatted UDP endpoint information
+         *
+         * @note Thread-safe operation with read lock
+         * @note Format: "ip:port : pid : process_name"
+         */
+        std::string dump_udp_table()
+        {
+            std::ostringstream oss;
+            std::shared_lock lock(udp_to_app_mutex_);
+            for (const auto& entry : udp_to_app_) {
+                oss << std::string(entry.first.ip) << " : " << entry.first.port
+                    << " : " << entry.second->id << " : "
+                    << tools::strings::to_string(entry.second->name) << '\n';
+            }
+            return oss.str();
+        }
+
+    private:
+        /**
+         * @brief Converts owner_module_resolver error codes to string representation.
+         *
+         * @param ec Error code to convert
+         * @return String representation of the error code
+         * @note Used for logging and debugging purposes
+         */
+        static constexpr const char* error_code_to_string(owner_module_resolver::error_code ec) noexcept {
+            using ec_t = owner_module_resolver::error_code;
+            switch (ec) {
+            case ec_t::success:              return "success";
+            case ec_t::invalid_pid:          return "invalid_pid";
+            case ec_t::access_denied:        return "access_denied";
+            case ec_t::module_not_found:     return "module_not_found";
+            case ec_t::service_not_found:    return "service_not_found";
+            case ec_t::insufficient_buffer:  return "insufficient_buffer";
+            case ec_t::api_failed:           return "api_failed";
+            }
+            return "unknown";
+        }
+
+        /**
+         * @brief Checks if a PID represents a system process that should be skipped.
+         *
+         * @param pid Process ID to check
+         * @return true if the PID should be skipped (0 = System Idle Process, 4 = System Process)
+         */
+        static constexpr bool is_system_process(const DWORD pid) noexcept {
+            return pid == 0 || pid == 4;
+        }
+
+        /**
+         * @brief Processes a TCPv4 table entry and resolves its owner process.
+         *
+         * Uses the owner_module_resolver to determine the process and service information
+         * for a TCP connection entry from the system's connection table.
+         *
+         * @param row Pointer to MIB_TCPROW_OWNER_MODULE structure
+         * @return The owner (null if unresolved) and whether it is complete enough to share with
+         *         later rows of the same PID and service tag; a service's host-image fallback or
+         *         a drive path without its device form is used for this row only
+         *
+         * @note Implements fallback from service tag to process image resolution
+         * @note Logs resolution attempts and results for debugging
+         */
+        owner_enrichment<const owner_identity>
+            process_tcp_entry_v4(const PMIB_TCPROW_OWNER_MODULE row) noexcept
+        {
+            const DWORD pid = row->dwOwningPid;
+            if (is_system_process(pid)) {
+                NETLIB_DEBUG(
+                    "TCPv4 entry with system process PID = {} ({}) skipping resolution",
+                    pid,
+                    pid == 0 ? "Idle" : "System");
+                return {};
+            }
+            const DWORD tag = owner_module_resolver::service_tag_from_owning_module_info(row->OwningModuleInfo);
+
+            const auto ext = Source::resolve_from_pid_and_tag_extended(pid, tag);
+            if (ext.error == owner_module_resolver::error_code::success) {
+                NETLIB_DEBUG(
+                    "Resolved TCPv4 owner: pid={} tag={} name=\"{}\" path=\"{}\"",
+                    pid,
+                    tag,
+                    tools::strings::to_string(ext.data.base_name),
+                    tools::strings::to_string(ext.data.full_path));
+
+                auto owner = std::make_shared<const owner_identity>(
+                    pid,
+                    std::wstring{ ext.data.base_name },
+                    std::wstring{ ext.data.full_path },
+                    &Source::convert_to_device_path
+                );
+                return { owner, owner->has_complete_device_path() };
+            }
+
+            if (tag != 0 && ext.error == owner_module_resolver::error_code::service_not_found) {
+                if (owner_module_resolver::result img{}; Source::resolve_from_pid_and_tag(pid, 0, img)) {
+                    NETLIB_DEBUG(
+                        "Service tag not found; fell back to process image (TCPv4): pid={} tag={} name=\"{}\" path=\"{}\"",
+                        pid,
+                        tag,
+                        tools::strings::to_string(img.base_name),
+                        tools::strings::to_string(img.full_path));
+
+                    return { std::make_shared<const owner_identity>(
+                        pid,
+                        std::move(img.base_name),
+                        std::move(img.full_path),
+                        &Source::convert_to_device_path
+                    ), false }; // keep this row's fallback, but retry the service on its next row
+                }
+            }
+
+            NETLIB_DEBUG(
+                "Failed to resolve TCPv4 owner: pid={} tag={} error={}{}",
+                pid,
+                tag,
+                error_code_to_string(ext.error),
+                ext.error_message.empty() ? "" : std::format(" msg=\"{}\"", tools::strings::to_string(ext.error_message)));
+
+            return {};
+        }
+
+        /**
+         * @brief Processes a TCPv6 table entry and resolves its owner process.
+         *
+         * Uses the owner_module_resolver to determine the process and service information
+         * for a TCP connection entry from the system's IPv6 connection table.
+         *
+         * @param row Pointer to MIB_TCP6ROW_OWNER_MODULE structure
+         * @return The owner (null if unresolved) and whether it is complete enough to share with
+         *         later rows of the same PID and service tag; a service's host-image fallback or
+         *         a drive path without its device form is used for this row only
+         *
+         * @note Implements fallback from service tag to process image resolution
+         * @note Logs resolution attempts and results for debugging
+         */
+        owner_enrichment<const owner_identity>
+            process_tcp_entry_v6(const PMIB_TCP6ROW_OWNER_MODULE row) noexcept
+        {
+            const DWORD pid = row->dwOwningPid;
+            if (is_system_process(pid)) {
+                NETLIB_DEBUG(
+                    "TCPv6 entry with system process PID = {} ({}) skipping resolution",
+                    pid,
+                    pid == 0 ? "Idle" : "System");
+                return {};
+            }
+            const DWORD tag = owner_module_resolver::service_tag_from_owning_module_info(row->OwningModuleInfo);
+
+            const auto ext = Source::resolve_from_pid_and_tag_extended(pid, tag);
+            if (ext.error == owner_module_resolver::error_code::success) {
+                NETLIB_DEBUG(
+                    "Resolved TCPv6 owner: pid={} tag={} name=\"{}\" path=\"{}\"",
+                    pid,
+                    tag,
+                    tools::strings::to_string(ext.data.base_name),
+                    tools::strings::to_string(ext.data.full_path));
+
+                auto owner = std::make_shared<const owner_identity>(
+                    pid,
+                    std::wstring{ ext.data.base_name },
+                    std::wstring{ ext.data.full_path },
+                    &Source::convert_to_device_path
+                );
+                return { owner, owner->has_complete_device_path() };
+            }
+
+            if (tag != 0 && ext.error == owner_module_resolver::error_code::service_not_found) {
+                if (owner_module_resolver::result img{}; Source::resolve_from_pid_and_tag(pid, 0, img)) {
+                    NETLIB_DEBUG(
+                        "Service tag not found; fell back to process image (TCPv6): pid={} tag={} name=\"{}\" path=\"{}\"",
+                        pid,
+                        tag,
+                        tools::strings::to_string(img.base_name),
+                        tools::strings::to_string(img.full_path));
+
+                    return { std::make_shared<const owner_identity>(
+                        pid,
+                        std::move(img.base_name),
+                        std::move(img.full_path),
+                        &Source::convert_to_device_path
+                    ), false }; // keep this row's fallback, but retry the service on its next row
+                }
+            }
+
+            NETLIB_DEBUG(
+                "Failed to resolve TCPv6 owner: pid={} tag={} error={}{}",
+                pid,
+                tag,
+                error_code_to_string(ext.error),
+                ext.error_message.empty() ? "" : std::format(" msg=\"{}\"", tools::strings::to_string(ext.error_message)));
+
+            return {};
+        }
+
+        /**
+         * @brief Processes a UDPv4 table entry and resolves its owner process.
+         *
+         * Uses the owner_module_resolver to determine the process and service information
+         * for a UDP endpoint entry from the system's connection table.
+         *
+         * @param row Pointer to MIB_UDPROW_OWNER_MODULE structure
+         * @return The owner (null if unresolved) and whether it is complete enough to share with
+         *         later rows of the same PID and service tag; a service's host-image fallback or
+         *         a drive path without its device form is used for this row only
+         *
+         * @note Implements fallback from service tag to process image resolution
+         * @note Logs resolution attempts and results for debugging
+         */
+        owner_enrichment<const owner_identity>
+            process_udp_entry_v4(const PMIB_UDPROW_OWNER_MODULE row) noexcept
+        {
+            const DWORD pid = row->dwOwningPid;
+            if (is_system_process(pid)) {
+                NETLIB_DEBUG(
+                    "UDPv4 entry with system process PID = {} ({}) skipping resolution",
+                    pid,
+                    pid == 0 ? "Idle" : "System");
+                return {};
+            }
+            const DWORD tag = owner_module_resolver::service_tag_from_owning_module_info(row->OwningModuleInfo);
+
+            const auto ext = Source::resolve_from_pid_and_tag_extended(pid, tag);
+            if (ext.error == owner_module_resolver::error_code::success) {
+                NETLIB_DEBUG(
+                    "Resolved UDPv4 owner: pid={} tag={} name=\"{}\" path=\"{}\"",
+                    pid,
+                    tag,
+                    tools::strings::to_string(ext.data.base_name),
+                    tools::strings::to_string(ext.data.full_path));
+
+                auto owner = std::make_shared<const owner_identity>(
+                    pid,
+                    std::wstring{ ext.data.base_name },
+                    std::wstring{ ext.data.full_path },
+                    &Source::convert_to_device_path
+                );
+                return { owner, owner->has_complete_device_path() };
+            }
+
+            if (tag != 0 && ext.error == owner_module_resolver::error_code::service_not_found) {
+                if (owner_module_resolver::result img{}; Source::resolve_from_pid_and_tag(pid, 0, img)) {
+                    NETLIB_DEBUG(
+                        "Service tag not found; fell back to process image (UDPv4): pid={} tag={} name=\"{}\" path=\"{}\"",
+                        pid,
+                        tag,
+                        tools::strings::to_string(img.base_name),
+                        tools::strings::to_string(img.full_path));
+
+                    return { std::make_shared<const owner_identity>(
+                        pid,
+                        std::move(img.base_name),
+                        std::move(img.full_path),
+                        &Source::convert_to_device_path
+                    ), false }; // keep this row's fallback, but retry the service on its next row
+                }
+            }
+
+            NETLIB_DEBUG(
+                "Failed to resolve UDPv4 owner: pid={} tag={} error={}{}",
+                pid,
+                tag,
+                error_code_to_string(ext.error),
+                ext.error_message.empty() ? "" : std::format(" msg=\"{}\"", tools::strings::to_string(ext.error_message)));
+
+            return {};
+        }
+
+        /**
+         * @brief Processes a UDPv6 table entry and resolves its owner process.
+         *
+         * Uses the owner_module_resolver to determine the process and service information
+         * for a UDP endpoint entry from the system's IPv6 connection table.
+         *
+         * @param row Pointer to MIB_UDP6ROW_OWNER_MODULE structure
+         * @return The owner (null if unresolved) and whether it is complete enough to share with
+         *         later rows of the same PID and service tag; a service's host-image fallback or
+         *         a drive path without its device form is used for this row only
+         *
+         * @note Implements fallback from service tag to process image resolution
+         * @note Logs resolution attempts and results for debugging
+         */
+        owner_enrichment<const owner_identity>
+            process_udp_entry_v6(const PMIB_UDP6ROW_OWNER_MODULE row) noexcept
+        {
+            const DWORD pid = row->dwOwningPid;
+            if (is_system_process(pid)) {
+                NETLIB_DEBUG(
+                    "UDPv6 entry with system process PID = {} ({}) skipping resolution",
+                    pid,
+                    pid == 0 ? "Idle" : "System");
+                return {};
+            }
+            const DWORD tag = owner_module_resolver::service_tag_from_owning_module_info(row->OwningModuleInfo);
+
+            const auto ext = Source::resolve_from_pid_and_tag_extended(pid, tag);
+            if (ext.error == owner_module_resolver::error_code::success) {
+                NETLIB_DEBUG(
+                    "Resolved UDPv6 owner: pid={} tag={} name=\"{}\" path=\"{}\"",
+                    pid,
+                    tag,
+                    tools::strings::to_string(ext.data.base_name),
+                    tools::strings::to_string(ext.data.full_path));
+
+                auto owner = std::make_shared<const owner_identity>(
+                    pid,
+                    std::wstring{ ext.data.base_name },
+                    std::wstring{ ext.data.full_path },
+                    &Source::convert_to_device_path
+                );
+                return { owner, owner->has_complete_device_path() };
+            }
+
+            if (tag != 0 && ext.error == owner_module_resolver::error_code::service_not_found) {
+                if (owner_module_resolver::result img{}; Source::resolve_from_pid_and_tag(pid, 0, img)) {
+                    NETLIB_DEBUG(
+                        "Service tag not found; fell back to process image (UDPv6): pid={} tag={} name=\"{}\" path=\"{}\"",
+                        pid,
+                        tag,
+                        tools::strings::to_string(img.base_name),
+                        tools::strings::to_string(img.full_path));
+
+                    return { std::make_shared<const owner_identity>(
+                        pid,
+                        std::move(img.base_name),
+                        std::move(img.full_path),
+                        &Source::convert_to_device_path
+                    ), false }; // keep this row's fallback, but retry the service on its next row
+                }
+            }
+
+            NETLIB_DEBUG(
+                "Failed to resolve UDPv6 owner: pid={} tag={} error={}{}",
+                pid,
+                tag,
+                error_code_to_string(ext.error),
+                ext.error_message.empty() ? "" : std::format(" msg=\"{}\"", tools::strings::to_string(ext.error_message)));
+
+            return {};
+        }
+
+        /// <summary>
+        /// Returns true and fills out_addr (network-order IPv4) if the 16-byte IPv6 address is an
+        /// IPv4-mapped address (::ffff:a.b.c.d).
+        /// </summary>
+        static bool is_v4_mapped_address(const UCHAR(&addr)[16], uint32_t& out_addr) noexcept
+        {
+            for (int i = 0; i < 10; ++i)
+                if (addr[i] != 0) return false;
+            if (addr[10] != 0xFF || addr[11] != 0xFF) return false;
+            // Copy the 4 embedded bytes as-is: they are the IPv4 address in network byte order,
+            // matching ip_address_v4's in_addr::S_un.S_addr layout on any host endianness.
+            memcpy(&out_addr, &addr[12], sizeof(out_addr));
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if the 16-byte IPv6 address is the unspecified address (::).
+        /// </summary>
+        static bool is_unspecified_v6_address(const UCHAR(&addr)[16]) noexcept
+        {
+            return std::ranges::all_of(addr, [](const unsigned char i) { return i == 0; });
+        }
+
+        /// <summary>
+        /// Enumerates the AF_INET6 TCP table and folds IPv4-mapped rows into the v4 session map.
+        /// </summary>
+        /// <remarks>
+        /// Dual-stack sockets (AF_INET6 with IPV6_V6ONLY=0) that carry IPv4 traffic appear ONLY in
+        /// the AF_INET6 connection table, as IPv4-mapped (::ffff:a.b.c.d) rows -- never in the
+        /// AF_INET table. The IPv4 packet handler consults only this v4 instance, so without folding
+        /// them in their traffic cannot be attributed and leaks un-proxied. Only called from (and so
+        /// only instantiated for) the v4 instance.
+        /// </remarks>
+        void add_v4_mapped_tcp_sessions(tcp_hashtable_t& tcp_to_app)
+        {
+            // Grow-and-retry with a real buffer from the first call (mirrors initialize_tcp_table).
+            // Starting size >= sizeof(the table struct) also satisfies GetExtendedTcpTable's SAL
+            // precondition on *pdwSize, avoiding a spurious null-sizing-call analysis warning.
+            DWORD size = sizeof(MIB_TCP6TABLE_OWNER_MODULE);
+            auto buffer = std::make_unique<char[]>(size);
+            for (;;)
+            {
+                const auto result = Source::get_extended_tcp_table(buffer.get(), &size, FALSE, AF_INET6,
+                    TCP_TABLE_OWNER_MODULE_CONNECTIONS, 0);
+                if (result == NO_ERROR)
+                    break;
+                if (result != ERROR_INSUFFICIENT_BUFFER)
+                    return;
+                buffer = std::make_unique<char[]>(size);
+            }
+
+            auto* table = reinterpret_cast<PMIB_TCP6TABLE_OWNER_MODULE>(buffer.get());
+            // This AF_INET6 table is a separate capture from the AF_INET one: a PID may have been
+            // reused between them, so it gets its own memo.
+            typename Source::template owner_memo_type<const owner_identity> owners;
+            for (size_t i = 0; i < table->dwNumEntries; ++i)
+            {
+                uint32_t local_v4 = 0, remote_v4 = 0;
+                if (!is_v4_mapped_address(table->table[i].ucLocalAddr, local_v4) ||
+                    !is_v4_mapped_address(table->table[i].ucRemoteAddr, remote_v4))
+                    continue; // genuine IPv6 connection: handled by the v6 instance
+
+                if (const auto identity = memoized_owner(owners, &table->table[i],
+                    [this](const PMIB_TCP6ROW_OWNER_MODULE row) { return process_tcp_entry_v6(row); }))
+                {
+                    // Keep a genuine AF_INET entry if one already exists for this 4-tuple.
+                    tcp_to_app.try_emplace(
+                        net::ip_session<net::ip_address_v4>(
+                            net::ip_address_v4{ local_v4 },
+                            net::ip_address_v4{ remote_v4 },
+                            ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort)),
+                            ntohs(static_cast<uint16_t>(table->table[i].dwRemotePort))),
+                        std::make_shared<network_process>(*identity));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Enumerates the AF_INET6 UDP table and folds IPv4-mapped and unspecified ([::]) rows into
+        /// the v4 endpoint map. An unspecified bind maps to the 0.0.0.0 wildcard, which the IPv4 UDP
+        /// handler already matches via its wildcard fallback. Only called from (and so only
+        /// instantiated for) the v4 instance.
+        /// </summary>
+        void add_v4_mapped_udp_endpoints(udp_hashtable_t& udp_to_app)
+        {
+            // Grow-and-retry with a real buffer from the first call (mirrors initialize_udp_table).
+            // Starting size >= sizeof(the table struct) also satisfies GetExtendedUdpTable's SAL
+            // precondition on *pdwSize, avoiding a spurious null-sizing-call analysis warning.
+            DWORD size = sizeof(MIB_UDP6TABLE_OWNER_MODULE);
+            auto buffer = std::make_unique<char[]>(size);
+            for (;;)
+            {
+                const auto result = Source::get_extended_udp_table(buffer.get(), &size, FALSE, AF_INET6,
+                    UDP_TABLE_OWNER_MODULE, 0);
+                if (result == NO_ERROR)
+                    break;
+                if (result != ERROR_INSUFFICIENT_BUFFER)
+                    return;
+                buffer = std::make_unique<char[]>(size);
+            }
+
+            auto* table = reinterpret_cast<PMIB_UDP6TABLE_OWNER_MODULE>(buffer.get());
+            // A separate capture from the AF_INET one, with its own memo (see add_v4_mapped_tcp_sessions).
+            typename Source::template owner_memo_type<const owner_identity> owners;
+            for (size_t i = 0; i < table->dwNumEntries; ++i)
+            {
+                uint32_t local_v4 = 0;
+                const bool mapped = is_v4_mapped_address(table->table[i].ucLocalAddr, local_v4);
+                if (!mapped && !is_unspecified_v6_address(table->table[i].ucLocalAddr))
+                    continue; // genuine IPv6-only endpoint
+
+                if (const auto identity = memoized_owner(owners, &table->table[i],
+                    [this](const PMIB_UDP6ROW_OWNER_MODULE row) { return process_udp_entry_v6(row); }))
+                {
+                    udp_to_app.try_emplace(
+                        net::ip_endpoint<net::ip_address_v4>(
+                            net::ip_address_v4{ mapped ? local_v4 : 0u },
+                            ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort))),
+                        std::make_shared<network_process>(*identity));
+                }
+            }
+        }
+
+        /**
+         * @brief Initializes the TCP connection hash table from system state.
+         *
+         * Queries the extended TCP table from the operating system and populates
+         * the internal TCP hash table with current connections and their owning processes.
+         * Handles both IPv4 and IPv6 connections based on template parameter.
+         *
+         * @return true if initialization succeeded, false otherwise
+         *
+         * @note Uses automatic buffer growth for large connection tables
+         * @note Thread-safe buffer management with mutex protection
+         * @note Replaces the entire hash table atomically
+         * @note Destroys the replaced table after releasing the reader lock
+         */
+        bool initialize_tcp_table()
+        {
+            try {
+                tcp_hashtable_t tcp_to_app;
+                {
+                    std::unique_lock lock(table_buffer_tcp_lock_);
+
+                    auto table_size = table_buffer_size_tcp_;
+
+                    for (;;) {
+                        const uint32_t result = Source::get_extended_tcp_table(
+                            table_buffer_tcp_.get(),
+                            &table_size,
+                            FALSE,
+                            T::af_type,
+                            TCP_TABLE_OWNER_MODULE_CONNECTIONS,
+                            0);
+
+                        if (result == NO_ERROR) break;
+                        if (result != ERROR_INSUFFICIENT_BUFFER) return false;
+
+                        // Allocate exactly the size the API asked for
+                        table_buffer_tcp_ = std::make_unique<char[]>(table_size);
+                        table_buffer_size_tcp_ = table_size;
+                    }
+
+                    if constexpr (std::is_same_v<T, net::ip_address_v4>) {
+                        auto* table = reinterpret_cast<PMIB_TCPTABLE_OWNER_MODULE>(table_buffer_tcp_.get());
+                        typename Source::template owner_memo_type<const owner_identity> owners; // this capture only
+                        for (size_t i = 0; i < table->dwNumEntries; i++) {
+                            if (const auto identity = memoized_owner(owners, &table->table[i],
+                                [this](const PMIB_TCPROW_OWNER_MODULE row) { return process_tcp_entry_v4(row); })) {
+                                tcp_to_app[net::ip_session<T>(
+                                    T{ table->table[i].dwLocalAddr },
+                                    T{ table->table[i].dwRemoteAddr },
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort)),
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwRemotePort)))]
+                                    = std::make_shared<network_process>(*identity);
+                            }
+                        }
+
+                        // Fold dual-stack (IPv4-mapped) connections from the AF_INET6 table so they
+                        // are attributable by the IPv4 packet handler (they never appear in the
+                        // AF_INET table). See add_v4_mapped_tcp_sessions.
+                        add_v4_mapped_tcp_sessions(tcp_to_app);
+                    }
+                    else {
+                        auto* table = reinterpret_cast<PMIB_TCP6TABLE_OWNER_MODULE>(table_buffer_tcp_.get());
+                        typename Source::template owner_memo_type<const owner_identity> owners; // this capture only
+                        for (size_t i = 0; i < table->dwNumEntries; i++) {
+                            if (const auto identity = memoized_owner(owners, &table->table[i],
+                                [this](const PMIB_TCP6ROW_OWNER_MODULE row) { return process_tcp_entry_v6(row); })) {
+                                tcp_to_app[net::ip_session<T>(
+                                    T{ table->table[i].ucLocalAddr },
+                                    T{ table->table[i].ucRemoteAddr },
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort)),
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwRemotePort)),
+                                    table->table[i].dwLocalScopeId,
+                                    table->table[i].dwRemoteScopeId)]
+                                    = std::make_shared<network_process>(*identity);
+                            }
+                        }
+                    }
+                }
+
+                // Publish with a non-throwing swap under the reader lock. tcp_to_app then holds the
+                // replaced table, which is destroyed (with the owners only it still references)
+                // when it leaves this scope, after the lock has been released.
+                {
+                    std::unique_lock lock(tcp_to_app_mutex_);
+                    tcp_to_app_.swap(tcp_to_app);
+                }
+            }
+            catch (...) {
+                return false;
+            }
+
+            return true;
+        }
+
+        /**
+         * @brief Initializes the UDP endpoint hash table from system state.
+         *
+         * Queries the extended UDP table from the operating system and populates
+         * the internal UDP hash table with current endpoints and their owning processes.
+         * Handles both IPv4 and IPv6 endpoints based on template parameter.
+         *
+         * @return true if initialization succeeded, false otherwise
+         *
+         * @note Uses automatic buffer growth for large endpoint tables
+         * @note Thread-safe buffer management with mutex protection
+         * @note Replaces the entire hash table atomically
+         * @note Destroys the replaced table after releasing the reader lock
+         */
+        bool initialize_udp_table()
+        {
+            try {
+                udp_hashtable_t udp_to_app;
+                {
+                    std::unique_lock lock(table_buffer_udp_lock_);
+
+                    auto table_size = table_buffer_size_udp_;
+
+                    for (;;) {
+                        const uint32_t result = Source::get_extended_udp_table(
+                            table_buffer_udp_.get(),
+                            &table_size,
+                            FALSE,
+                            T::af_type,
+                            UDP_TABLE_OWNER_MODULE,
+                            0);
+
+                        if (result == NO_ERROR) break;
+                        if (result != ERROR_INSUFFICIENT_BUFFER) return false;
+
+                        // Allocate exactly the size the API asked for
+                        table_buffer_udp_ = std::make_unique<char[]>(table_size);
+                        table_buffer_size_udp_ = table_size;
+                    }
+
+                    if constexpr (std::is_same_v<T, net::ip_address_v4>) {
+                        auto* table = reinterpret_cast<PMIB_UDPTABLE_OWNER_MODULE>(table_buffer_udp_.get());
+                        typename Source::template owner_memo_type<const owner_identity> owners; // this capture only
+                        for (size_t i = 0; i < table->dwNumEntries; i++) {
+                            if (const auto identity = memoized_owner(owners, &table->table[i],
+                                [this](const PMIB_UDPROW_OWNER_MODULE row) { return process_udp_entry_v4(row); })) {
+                                udp_to_app[net::ip_endpoint<T>(
+                                    T{ table->table[i].dwLocalAddr },
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort)))]
+                                    = std::make_shared<network_process>(*identity);
+                            }
+                        }
+
+                        // Fold dual-stack (IPv4-mapped and unspecified) endpoints from the AF_INET6
+                        // table so they are attributable by the IPv4 packet handler. See
+                        // add_v4_mapped_udp_endpoints.
+                        add_v4_mapped_udp_endpoints(udp_to_app);
+                    }
+                    else {
+                        auto* table = reinterpret_cast<PMIB_UDP6TABLE_OWNER_MODULE>(table_buffer_udp_.get());
+                        typename Source::template owner_memo_type<const owner_identity> owners; // this capture only
+                        for (size_t i = 0; i < table->dwNumEntries; i++) {
+                            if (const auto identity = memoized_owner(owners, &table->table[i],
+                                [this](const PMIB_UDP6ROW_OWNER_MODULE row) { return process_udp_entry_v6(row); })) {
+                                udp_to_app[net::ip_endpoint<T>(
+                                    T{ table->table[i].ucLocalAddr },
+                                    ntohs(static_cast<uint16_t>(table->table[i].dwLocalPort)),
+                                    0)]
+                                    = std::make_shared<network_process>(*identity);
+                            }
+                        }
+                    }
+                }
+
+                // Publish and retire as in initialize_tcp_table: the replaced table is destroyed
+                // after the lock has been released.
+                {
+                    std::unique_lock lock(udp_to_app_mutex_);
+                    udp_to_app_.swap(udp_to_app);
+                }
+            }
+            catch (...) {
+                return false;
+            }
+
+            return true;
+        }
+    };
+}

@@ -22,4 +22,10 @@ public class GameTaskConfig
 
     public int DelayBeforeStartMs { get; set; }
     public int TimeoutMinutes { get; set; } = 60;
+    private UdpProxyConfig _udpProxy = new();
+    public UdpProxyConfig UdpProxy
+    {
+        get => _udpProxy;
+        set => _udpProxy = value ?? new();
+    }
 }

@@ -43,7 +43,13 @@ public partial class MainViewModel
             StartStartupTwinkleTrayEnforcement();
 
         if (CloseFlClashBeforeRun)
-            _startupFlClashTask = CloseStartupFlClashAsync();
+        {
+            if (Tasks.Any(task => task.Enabled && task.UdpProxyEnabled &&
+                    UdpProxyRules.UsesLocalUpstream(task.ToConfig().UdpProxy)))
+                AddLog("存在使用本机 UDP 上游的任务，已跳过启动时关闭 FlClash；运行任务前请取消‘运行前关闭 FlClash’。");
+            else
+                _startupFlClashTask = CloseStartupFlClashAsync();
+        }
 
         RefreshWebhookRelayState();
 
