@@ -3,7 +3,7 @@ using System.IO;
 
 namespace Game_Daily_Routine_Launcher;
 
-public sealed class BuiltinUdpProxyService : IUdpProxyService
+public sealed class BuiltinUdpProxyService(Action<string>? log = null) : IUdpProxyService
 {
     public async Task<IUdpProxySession> StartAsync(GameTaskConfig task, CancellationToken cancellationToken)
     {
@@ -11,8 +11,6 @@ public sealed class BuiltinUdpProxyService : IUdpProxyService
         UdpProxyPaths.RequireAdministrator();
         if (!File.Exists(UdpProxyPaths.EngineExecutable))
             throw new FileNotFoundException("内置 UDP 组件缺失，请重新解压完整 MAAA 发布包。", UdpProxyPaths.EngineExecutable);
-        if (!UdpProxyDriver.HasDriver())
-            throw new InvalidOperationException("尚未安装 Windows Packet Filter 驱动，请在任务配置中点击‘准备 UDP 组件’。");
         var engines = Process.GetProcessesByName("ProxiFyre");
         try
         {
@@ -30,17 +28,23 @@ public sealed class BuiltinUdpProxyService : IUdpProxyService
             }
             finally { foreach (var process in processes) process.Dispose(); }
         }
-        await Socks5UdpProbe.CheckAsync(task.UdpProxy, cancellationToken).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        var session = BuiltinUdpProxySession.Start(UdpProxyRules.BuildArguments(task));
+        if (!UdpProxyDriver.HasDriver())
+            await UdpProxySetup.PrepareAsync(log ?? (_ => { }), cancellationToken).ConfigureAwait(false);
+        var upstream = await TaskUdpUpstream.StartAsync(task.UdpProxy, log ?? (_ => { }), cancellationToken)
+            .ConfigureAwait(false);
+        BuiltinUdpProxySession? session = null;
         try
         {
+            await Socks5UdpProbe.CheckAsync(upstream?.Endpoint ?? task.UdpProxy, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            session = BuiltinUdpProxySession.Start(UdpProxyRules.BuildArguments(task, upstream?.Endpoint));
             await session.WaitUntilReadyAsync(cancellationToken).ConfigureAwait(false);
-            return session;
+            return upstream is null ? session : new TaskUdpProxySession(session, upstream);
         }
         catch
         {
-            await session.DisposeAsync().ConfigureAwait(false);
+            try { if (session is not null) await session.DisposeAsync().ConfigureAwait(false); }
+            finally { if (upstream is not null) await upstream.DisposeAsync().ConfigureAwait(false); }
             throw;
         }
     }

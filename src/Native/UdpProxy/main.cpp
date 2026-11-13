@@ -58,7 +58,14 @@ int wmain(int argc, wchar_t** argv)
         exclusive_engine lock;
         winsock_scope winsock;
         auto diagnostic = std::shared_ptr<std::ostream>(&std::cerr, [](std::ostream*) {});
-        proxy::socks_local_router router(netlib::log::log_level::error, diagnostic, nullptr, true);
+        std::shared_ptr<std::ofstream> capture;
+        if (!options.capture_path.empty())
+        {
+            capture = std::make_shared<std::ofstream>(options.capture_path, std::ios::binary);
+            if (!*capture) throw std::runtime_error("Cannot open diagnostic capture");
+        }
+        proxy::socks_local_router router(options.diagnostics ? netlib::log::log_level::debug :
+            netlib::log::log_level::error, diagnostic, capture, true);
         if (!router.set_udp_only()) throw std::runtime_error("Failed to configure TCP pass-through filters");
         router.set_bypass_lan();
         // UDP is fixed here; neither task settings nor arguments can enable TCP interception.

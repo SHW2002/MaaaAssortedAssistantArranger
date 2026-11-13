@@ -1,0 +1,15 @@
+<Project>
+  <Target Name="PrepareUdpDependencies" BeforeTargets="ComputeFilesToPublish">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\src\Build\Prepare-UdpDependencies.ps1&quot; -ProjectRoot &quot;$(MSBuildProjectDirectory)&quot;" />
+  </Target>
+  <ItemGroup>
+    <Content Include="$(MSBuildProjectDirectory)\artifacts\udp-dependencies\Windows.Packet.Filter.3.6.2.1.x64.msi"
+             Link="components\udp\dependencies\Windows.Packet.Filter.3.6.2.1.x64.msi" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildProjectDirectory)\artifacts\udp-dependencies\mihomo\mihomo-maaa.exe"
+             Link="components\udp\upstream\mihomo.exe" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildProjectDirectory)\artifacts\udp-dependencies\mihomo-v1.19.34-maaa.1-source.tar.gz"
+             Link="components\udp\source\mihomo-v1.19.34-maaa.1-source.tar.gz" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildProjectDirectory)\artifacts\udp-dependencies\mihomo\build-info.json"
+             Link="components\udp\upstream\build-info.json" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

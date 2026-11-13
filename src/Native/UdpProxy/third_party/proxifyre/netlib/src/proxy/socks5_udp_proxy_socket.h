@@ -169,6 +169,7 @@ namespace proxy
         /// Address structure representing the local socket's destination address for outgoing packets.
         /// </summary>
         SOCKADDR_STORAGE local_address_sa_{};
+        maaa::udp_reply_handler reply_handler_;
 
         /// <summary>
         /// Unique pointer to the negotiation context containing authentication and session information.
@@ -313,6 +314,27 @@ namespace proxy
         {
             auto self = this->shared_from_this();
             io_context_recv_from_remote_.proxy_socket_ptr = self;
+        }
+
+        void set_reply_handler(maaa::udp_reply_handler handler)
+        {
+            reply_handler_ = std::move(handler);
+        }
+
+        bool send_local_reply(const uint8_t* data, const size_t size)
+        {
+            auto* context = socks5_udp_per_io_context<T>::allocate_io_context(
+                proxy_io_operation::relay_io_write, this->shared_from_this(), true, static_cast<DWORD>(size));
+            if (!context) return false;
+            context->wsa_buf->len = static_cast<ULONG>(size);
+            memcpy(context->wsa_buf->buf, data, size);
+            if (post_sendto(local_socket_, context->wsa_buf.get(), context,
+                reinterpret_cast<sockaddr*>(&local_address_sa_),
+                address_type_t::af_type == AF_INET ? sizeof(sockaddr_in) : sizeof(sockaddr_in6)) != SOCKET_ERROR)
+                return true;
+            socks5_udp_per_io_context<T>::release_io_context(context);
+            close_client();
+            return false;
         }
 
         /**
@@ -677,48 +699,14 @@ namespace proxy
                 // remote_socket_ is connect()'d to the relay endpoint, so a malicious/malformed
                 // server (or a spoofed 0-byte datagram from that address) can reach this path.
                 // Skip the local send for empty datagrams and just re-arm the remote receive.
-                if (io_size > 0)
+                const bool injected = reply_handler_ && address_type_t::af_type == AF_INET &&
+                    reply_handler_(ntohs(reinterpret_cast<const sockaddr_in*>(&local_address_sa_)->sin_port),
+                        reinterpret_cast<const uint8_t*>(from_remote_to_local_buffer_.data()), io_size,
+                        [this](const uint8_t* data, size_t size) { return send_local_reply(data, size); });
+                if (io_size > 0 && !injected)
                 {
-                // Use shared_from_this() to get shared_ptr
-                if (auto* io_context_send_to_local = socks5_udp_per_io_context<T>::allocate_io_context(
-                    proxy_io_operation::relay_io_write, this->shared_from_this(), true, io_size);
-                    io_context_send_to_local)
-                {
-                    NETLIB_DEBUG("process_receive_buffer_complete: I/O context allocated, preparing data for local send");
-
-                    io_context_send_to_local->wsa_buf->len = io_size;
-                    memmove(io_context_send_to_local->wsa_buf->buf, from_remote_to_local_buffer_.data(), io_size);
-
-                    NETLIB_DEBUG("process_receive_buffer_complete: {}:{} sending {} bytes to local socket",
-                        remote_peer_address_, remote_peer_port_, io_size);
-
-                    if (post_sendto(
-                        local_socket_,
-                        io_context_send_to_local->wsa_buf.get(),
-                        io_context_send_to_local,
-                        reinterpret_cast<sockaddr*>(&local_address_sa_),
-                        (address_type_t::af_type == AF_INET) ? sizeof(sockaddr_in) : sizeof(sockaddr_in6)) == SOCKET_ERROR)
-                    {
-                        const auto error = WSAGetLastError();
-                        NETLIB_WARNING("process_receive_buffer_complete: WSASendTo to local failed with error: {}", error);
-                        // A synchronously-failed post yields no IOCP completion, so
-                        // process_send_buffer_complete() will never run to release this heap
-                        // io_context. It holds a strong shared_from_this() reference, so leaving it
-                        // would pin this socket alive forever (defeating release_self_reference()).
-                        // Release it by hand, exactly as the completion path does.
-                        socks5_udp_per_io_context<T>::release_io_context(io_context_send_to_local);
-                        // Close connection to remote peer in case of error
-                        close_client();
-                    }
-                    else
-                    {
-                        NETLIB_DEBUG("process_receive_buffer_complete: WSASendTo to local initiated successfully");
-                    }
-                }
-                else
-                {
-                    NETLIB_ERROR("process_receive_buffer_complete: Failed to allocate I/O context for local send");
-                }
+                    if (!send_local_reply(reinterpret_cast<const uint8_t*>(from_remote_to_local_buffer_.data()), io_size))
+                        NETLIB_ERROR("process_receive_buffer_complete: Failed to send reply to local client");
                 } // if (io_size > 0): empty relay datagrams fall straight through to the re-arm
 
                 NETLIB_DEBUG("process_receive_buffer_complete: Initiating new receive operation on remote socket");

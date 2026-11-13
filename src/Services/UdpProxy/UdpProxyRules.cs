@@ -43,13 +43,14 @@ public static class UdpProxyRules
             throw new InvalidOperationException("任务使用本机 SOCKS5 UDP 上游，请先取消‘运行前关闭 FlClash’，以免关闭上游代理。");
     }
 
-    public static IReadOnlyList<string> BuildArguments(GameTaskConfig task)
+    public static IReadOnlyList<string> BuildArguments(GameTaskConfig task, UdpProxyConfig? effectiveEndpoint = null)
     {
         var names = Validate(task);
         if (!task.UdpProxy.Enabled)
             throw new InvalidOperationException("UDP 代理尚未启用。");
-        var host = new IdnMapping().GetAscii(task.UdpProxy.Socks5Host);
-        var arguments = new List<string> { "--endpoint", $"{host}:{task.UdpProxy.Socks5Port}" };
+        var endpoint = effectiveEndpoint ?? task.UdpProxy;
+        var host = new IdnMapping().GetAscii(endpoint.Socks5Host);
+        var arguments = new List<string> { "--endpoint", $"{host}:{endpoint.Socks5Port}" };
         foreach (var name in names)
         {
             arguments.Add("--app");

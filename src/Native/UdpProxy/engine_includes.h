@@ -55,6 +55,7 @@
 #include "third_party/proxifyre/netlib/src/ndisapi/tcp_local_redirect.h"
 #include "third_party/proxifyre/netlib/src/proxy/proxy_common.h"
 #include "third_party/proxifyre/netlib/src/proxy/socks5_common.h"
+#include "udp_reply_injector.h"
 #include "third_party/proxifyre/netlib/src/ndisapi/socks5_udp_local_redirect.h"
 #include "third_party/proxifyre/netlib/src/proxy/packet_pool.h"
 #include "third_party/proxifyre/netlib/src/proxy/tcp_proxy_socket.h"

@@ -24,7 +24,7 @@ internal static class UdpProxyDriver
         {
             UseShellExecute = false, CreateNoWindow = true
         };
-        foreach (var arg in new[] { "/i", msiPath, "/passive", "/norestart" }) info.ArgumentList.Add(arg);
+        foreach (var arg in new[] { "/i", msiPath, "/qn", "/norestart", "REBOOT=ReallySuppress" }) info.ArgumentList.Add(arg);
         using var process = Process.Start(info) ?? throw new IOException("无法启动驱动安装程序。");
         // Finish an MSI transaction before allowing the application to exit.
         await process.WaitForExitAsync().ConfigureAwait(false);

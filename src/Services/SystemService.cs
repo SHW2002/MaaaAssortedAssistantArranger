@@ -58,7 +58,7 @@ public static class SystemService
             "/TN", taskName,
             "/TR", command,
             "/SC", "ONLOGON",
-            "/RL", "LIMITED",
+            "/RL", "HIGHEST",
             "/F");
 
         if (!createResult.success)

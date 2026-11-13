@@ -10,7 +10,7 @@
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <ApplicationIcon>res\icon.ico</ApplicationIcon>
     <AssemblyName>MaaaAssortedAssistantArranger</AssemblyName>
-    <Version>3.1.1</Version>
+    <Version>3.1.2</Version>
     <Platforms>x64</Platforms>
     <Platform>x64</Platform>
     <PlatformTarget>x64</PlatformTarget>
@@ -27,6 +27,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="ScreenRecorderLib" Version="6.6.0" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,8 +36,7 @@
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
     <Resource Include="res\icon.ico" />
-    <Content Include="$(MSBuildProjectDirectory)\artifacts\native-udp\Release\MaaaUdpProxy.exe"
-             Link="components\udp\MaaaUdpProxy.exe">
+    <Content Include="$(MSBuildProjectDirectory)\artifacts\native-udp\Release\MaaaUdpProxy.exe" Link="components\udp\MaaaUdpProxy.exe">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
@@ -50,6 +50,7 @@
   </ItemGroup>
 
   <Import Project="src\Native\UdpProxy\UdpProxy.targets" />
+  <Import Project="src\Build\UdpDependencies.targets" />
 
   <!-- publish 后自动压缩 -->
   <Target Name="ZipAfterPublish" AfterTargets="Publish">

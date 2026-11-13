@@ -8,7 +8,7 @@ MAAA ships `components/udp/MaaaUdpProxy.exe`, compiled from the vendored open-so
 
 1. Extract the complete MAAA package, then run MAAA as administrator.
 2. Open a task's configuration and enable **为此任务启用 UDP 代理**.
-3. Click **准备 UDP 组件**. After your confirmation, MAAA downloads the official Windows Packet Filter x64 MSI, verifies its pinned SHA-256, and installs it if a compatible driver is absent. Adapter installation can briefly reconnect the network; a required reboot is reported, never forced.
+3. Task startup automatically prepares a missing driver. The full package contains the official Windows Packet Filter x64 MSI; MAAA verifies its pinned SHA-256 before unattended installation and downloads it only if absent. **准备 UDP 组件** also prepares it in advance. Installation may briefly reconnect adapters; a required reboot is reported, never forced.
 4. Keep a SOCKS5 upstream running. For FlClash, enter its actual mixed/SOCKS5 listening host and port; the example `127.0.0.1:7890` is only a default.
 5. Leave **自定义(可空)** empty to use automatic game presets, or the monitored process for other tasks. Check **生效进程** for the exact selection. To override it, enter complete executable filenames separated by commas or semicolons. Existing multiline overrides remain supported. Matching applies to every instance with that exact filename; directories, wildcards, and automatic child-process inheritance are unsupported.
 6. Set the task's monitored process to a process that stays alive for the whole operation (`StarRail` for directly monitoring the game), and set a positive timeout. Close existing target processes before starting.
@@ -36,6 +36,12 @@ Automatic targets are resolved when needed, without writing them into the custom
 
 MAAA validates the settings and checks SOCKS5 `UDP ASSOCIATE` support. It launches its hidden component, waits up to 20 seconds for an explicit readiness acknowledgement after the listeners, process associations, and filter have started, and only then launches the task tool.
 
+For a running local FlClash upstream, MAAA reads its cached configuration and saved node choice, then runs the bundled Mihomo as a task-owned local exit forced through that node. This prevents process/GEOIP direct rules from routing game UDP back to a direct connection. Direct, unavailable, and UDP-disabled selections fail explicitly. Credentials are kept in an administrator-only temporary directory, removed at exit, and excluded from logs. Other SOCKS5 upstreams continue using their configured endpoint.
+
+Large IPv4 replies are stripped of SOCKS5 framing before MTU-aligned fragment injection and Windows reassembly, avoiding the upstream redirector's inability to rewrite fragmented replies.
+
+For an already matched `StarRail.exe`, large batches that fully validate as token-bearing 28-byte KCP frames are separated at segment boundaries and returned through the ordinary UDP path. Payloads remain unchanged; incomplete/invalid batches are not split and other processes do not use this adaptation.
+
 The component remains alive while MAAA monitors the configured process. UDP tasks poll every 500 ms independently of the normal scheduling interval. Monitor exit, timeout, tool-launch failure, cancellation, or closing MAAA all stop the component. A stop request first asks the router to release its filters gracefully; a Windows Job Object terminates a stalled component. Parent pipe EOF and the Job Object also cover abnormal parent termination. Existing game processes are not terminated when you stop a task.
 
 If the component exits unexpectedly, the task is marked as failed. A startup error prevents the tool from launching. Cleanup completes before the next task starts. The driver stays installed because it is a shared system component; the forwarding process does not stay resident or register a Windows service.
@@ -52,6 +58,8 @@ If the component exits unexpectedly, the task is marked as failed. A startup err
 ## Source and build
 
 The native component and its third-party dependencies are under `src/Native/UdpProxy/`. CMake and MSVC v143 build it automatically during the .NET build. The CRT and driver API are statically linked; no ProxiFyre binary, C++/CLI, .NET Framework, or separate VC runtime download is needed.
+
+`dotnet publish` obtains and verifies pinned driver and Mihomo sources, builds the adapted upstream using Go, and includes exact vendored dependencies in its complete corresponding source archive. The adaptation preserves AnyTLS/UoT replies above the original 16 KiB receive limit. Packages include `components/udp/dependencies/`, `components/udp/upstream/`, and `components/udp/source/mihomo-v1.19.34-maaa.1-source.tar.gz`; users do not manually install a proxy service. Publishing requires Go 1.26 or later.
 
 The release archive contains corresponding source under `components/udp/source/`; build it with:
 

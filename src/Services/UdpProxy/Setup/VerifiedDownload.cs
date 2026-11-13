@@ -20,6 +20,12 @@ internal sealed class VerifiedDownload(string path, FileStream stream) : IDispos
             await response.Content.CopyToAsync(file, cancellationToken);
         }
         // Keep the verified bytes locked against writes/deletion until the installer exits.
+        return await OpenVerifiedAsync(path, hash, cancellationToken);
+    }
+
+    public static async Task<VerifiedDownload> OpenVerifiedAsync(string path, string hash,
+        CancellationToken cancellationToken)
+    {
         var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {

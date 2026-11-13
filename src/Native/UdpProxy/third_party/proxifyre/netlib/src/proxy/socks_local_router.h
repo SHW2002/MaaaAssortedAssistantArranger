@@ -121,6 +121,7 @@ namespace proxy
          *        value independently.
          */
         std::unordered_map<uint16_t, tcp_mapper_entry> tcp_mapper_;
+        maaa::udp_reply_injector large_udp_replies_;
         std::unordered_map<uint16_t, tcp_mapper_entry_v6> tcp_mapper_v6_;
 
         /**
@@ -1204,6 +1205,17 @@ namespace proxy
                         auto& mapper = udp_mapper_for<AddrT>();
                         std::scoped_lock lock(udp_mapper_lock_for<AddrT>());
                         mapper.erase(port);
+                    }, [this](const uint16_t port, const uint8_t* data, const size_t size, const maaa::udp_local_reply& send_local)
+                    {
+                        if constexpr (std::is_same_v<AddrT, net::ip_address_v4>)
+                            return large_udp_replies_.deliver(port, data, size, [this](INTERMEDIATE_BUFFER& packet)
+                            {
+                                log_packet_to_pcap(packet);
+                                auto* pointer = &packet;
+                                DWORD sent = 0;
+                                return packet_filter_->SendPacketsToMstcpUnsorted(&pointer, 1, &sent) && sent == 1;
+                            }, send_local);
+                        return false;
                     })
                 : nullptr;
 
@@ -1982,6 +1994,7 @@ namespace proxy
 
             if (proxy_lookup.action == proxy_port_action::proxy)
             {
+                large_udp_replies_.remember(buffer, _wcsicmp(process->name.c_str(), L"StarRail.exe") == 0);
                 const auto is_new_endpoint = udp_redirect_->is_new_endpoint(buffer);
                 const auto source_address = net::ip_address_v4(ip_header->ip_src);
                 const auto source_port = ntohs(udp_header->th_sport);

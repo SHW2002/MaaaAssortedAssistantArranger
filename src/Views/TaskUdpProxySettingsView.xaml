@@ -34,7 +34,7 @@
                 </Grid>
             </Grid>
             <TextBlock Margin="0,6,0,0" Foreground="#616161" FontSize="11" TextWrapping="Wrap"
-                       Text="需要管理员权限及首次准备组件。先启动 UDP 引擎，再启动工具；监控进程退出、超时或停止任务后关闭引擎。请将上方监控进程设为任务全程存活的进程。上游节点也须支持 UDP；使用 FlClash 时请取消‘运行前关闭 FlClash’。" />
+                       Text="需要管理员权限。驱动及转发组件已随包提供，启动任务时自动准备；使用本机 FlClash 时自动跟随当前节点建立任务独立出口。先启动代理，再启动工具，监控进程退出后关闭。请监控任务全程存活的进程；上游须支持 UDP，并取消‘运行前关闭 FlClash’。" />
             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                 <Button Content="准备 UDP 组件" Style="{StaticResource SmallButton}"
                         Command="{Binding DataContext.PrepareUdpProxyCommand, RelativeSource={RelativeSource AncestorType=Window}}" />

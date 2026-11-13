@@ -24,10 +24,15 @@ public static class UdpProxySetup
                 return;
             }
             using var directory = new PrivateInstallDirectory();
-            log("正在下载官方 Windows Packet Filter 3.6.2.1 x64 驱动...");
-            using var driver = await VerifiedDownload.GetAsync(
-                "https://github.com/wiresock/ndisapi/releases/download/v3.6.2/Windows.Packet.Filter.3.6.2.1.x64.msi",
-                DriverHash, directory.Path, cancellationToken).ConfigureAwait(false);
+            var bundled = Path.Combine(UdpProxyPaths.EngineDirectory, "dependencies",
+                "Windows.Packet.Filter.3.6.2.1.x64.msi");
+            log(File.Exists(bundled) ? "正在校验随包提供的 Windows Packet Filter 驱动..." :
+                "发布包缺少驱动安装包，正在自动下载官方 Windows Packet Filter 3.6.2.1 x64 驱动...");
+            using var driver = File.Exists(bundled)
+                ? await VerifiedDownload.OpenVerifiedAsync(bundled, DriverHash, cancellationToken).ConfigureAwait(false)
+                : await VerifiedDownload.GetAsync(
+                    "https://github.com/wiresock/ndisapi/releases/download/v3.6.2/Windows.Packet.Filter.3.6.2.1.x64.msi",
+                    DriverHash, directory.Path, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             log("驱动 SHA-256 校验通过，正在安装，网络可能短暂重连...");
             await UdpProxyDriver.InstallAsync(driver.Path).ConfigureAwait(false);

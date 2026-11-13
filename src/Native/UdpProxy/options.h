@@ -23,6 +23,8 @@ namespace maaa
         std::string endpoint;
         std::vector<std::wstring> applications;
         bool validate_only = false;
+        bool diagnostics = false;
+        std::wstring capture_path;
     };
 
     inline options parse_options(int argc, wchar_t** argv)
@@ -32,9 +34,11 @@ namespace maaa
         {
             const std::wstring argument = argv[index];
             if (argument == L"--validate") { result.validate_only = true; continue; }
+            if (argument == L"--diagnostics") { result.diagnostics = true; continue; }
             if (++index >= argc) throw std::invalid_argument("Missing option value");
             const std::wstring value = argv[index];
-            if (argument == L"--app")
+            if (argument == L"--capture") result.capture_path = value;
+            else if (argument == L"--app")
             {
                 if (!valid_process_name(value)) throw std::invalid_argument("Expected an exact .exe filename");
                 result.applications.push_back(value);

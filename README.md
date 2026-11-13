@@ -67,7 +67,7 @@ ctest --test-dir artifacts/native-udp -C Release --output-on-failure
 dotnet publish -c Release -r win-x64 --self-contained false
 ```
 
-The .NET build also compiles the native UDP component using CMake. Dependencies are vendored at pinned revisions; no source downloads are needed during the build. If the SDK workload resolver fails in the local installation, set `$env:MSBuildEnableWorkloadResolver='false'` before building.
+The .NET build also compiles the native UDP component using CMake and vendored sources. Publishing requires Go 1.26+, downloads verified driver/Mihomo sources, builds the upstream with full-size UDP receive buffers, and bundles its complete corresponding source. Task startup automatically prepares a missing driver. A local FlClash upstream is followed through a task-owned exit without rewriting FlClash rules. If the SDK workload resolver fails, set `$env:MSBuildEnableWorkloadResolver='false'` before building.
 
 Every publish creates an archive in `bin/Release-Archives/` named `MaaaAssortedAssistantArranger-win-x64-{portable|self-contained}-yyMMdd-HHmmss.zip`. The package includes the native component, its corresponding source, licenses, and UDP documentation; private local settings are excluded.
 

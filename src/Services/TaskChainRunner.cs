@@ -21,7 +21,7 @@ public partial class TaskChainRunner : IDisposable
     {
         _audio = audio;
         _processes = processes ?? new TaskProcessService(pollIntervalMs);
-        _udpProxy = udpProxy ?? new BuiltinUdpProxyService();
+        _udpProxy = udpProxy ?? new BuiltinUdpProxyService(Log);
     }
 
     public async Task<bool> RunChainAsync(IReadOnlyList<GameTaskConfig> tasks, bool muteOnStart)

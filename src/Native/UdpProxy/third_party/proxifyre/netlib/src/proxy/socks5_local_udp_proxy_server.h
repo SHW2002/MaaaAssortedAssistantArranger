@@ -205,6 +205,7 @@ namespace proxy
          * @brief Function to query remote peer information for a given local address and port.
          */
         std::function<query_remote_peer_t> query_remote_peer_;
+        maaa::udp_reply_handler reply_handler_;
 
         /**
          * @brief Optional callback that commits a successfully established source-port mapping.
@@ -520,10 +521,12 @@ namespace proxy
             const std::function<query_remote_peer_t>& query_remote_peer_fn,
             const log_level log_level = log_level::error,
             std::shared_ptr<std::ostream> log_stream = nullptr,
-            const std::function<commit_remote_peer_t>& commit_remote_peer_fn = {})
+            const std::function<commit_remote_peer_t>& commit_remote_peer_fn = {},
+            maaa::udp_reply_handler reply_handler = {})
             : logger(log_level, std::move(log_stream)),
             completion_port_(completion_port),
             query_remote_peer_(query_remote_peer_fn),
+            reply_handler_(std::move(reply_handler)),
             commit_remote_peer_(commit_remote_peer_fn),
             proxy_port_(proxy_port)
         {
@@ -1964,6 +1967,7 @@ namespace proxy
                 try
                 {
                     // Initialize I/O contexts with shared_ptr
+                    it->second->set_reply_handler(reply_handler_);
                     it->second->initialize_io_contexts();
 
                     if (!it->second->associate_to_completion_port(completion_key_, completion_port_))
