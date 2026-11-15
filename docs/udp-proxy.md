@@ -6,7 +6,7 @@ MAAA ships `components/udp/MaaaUdpProxy.exe`, compiled from the vendored open-so
 
 ## First use
 
-1. Extract the complete MAAA package, then run MAAA as administrator.
+1. Extract the complete MAAA package. You can launch normally; MAAA requests administrator privileges when starting a task that enables UDP or preparing the components.
 2. Open a task's configuration and enable **为此任务启用 UDP 代理**.
 3. Task startup automatically prepares a missing driver. The full package contains the official Windows Packet Filter x64 MSI; MAAA verifies its pinned SHA-256 before unattended installation and downloads it only if absent. **准备 UDP 组件** also prepares it in advance. Installation may briefly reconnect adapters; a required reboot is reported, never forced.
 4. Keep a SOCKS5 upstream running. For FlClash, enter its actual mixed/SOCKS5 listening host and port; the example `127.0.0.1:7890` is only a default.
@@ -14,7 +14,9 @@ MAAA ships `components/udp/MaaaUdpProxy.exe`, compiled from the vendored open-so
 6. Set the task's monitored process to a process that stays alive for the whole operation (`StarRail` for directly monitoring the game), and set a positive timeout. Close existing target processes before starting.
 7. When using a local FlClash upstream, disable **运行前关闭 FlClash**. Conflicting task chains are rejected before the close hook; loading such a configuration also skips the startup close.
 
-For unattended use, configure the existing Windows scheduled task to run MAAA with highest privileges. The system proxy itself need not be enabled if the configured SOCKS5 listener remains available.
+After UAC approval, MAAA waits for the original instance to clean up and exit, then resumes the requested chain, individual task, or component preparation as administrator. It preserves the saved configuration and automatic-run context. Canceling UAC keeps the original window open without starting the operation, so you can retry. Tasks without UDP do not require elevation, and administrator instances do not request it again.
+
+For unattended use, configure the Windows scheduled task to run MAAA with highest privileges to avoid waiting for UAC approval. The built-in login startup option already creates such a task; toggle it off and on to update an older registration. The system proxy itself need not be enabled if the configured SOCKS5 listener remains available.
 
 ## Automatic process selection
 

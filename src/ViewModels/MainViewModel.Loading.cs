@@ -33,7 +33,7 @@ public partial class MainViewModel
         if (App.IsAutoRun && RandomStartEnabled)
             _randomAutoStartTime = _appConfig.GetRandomScheduledStartTime(DateTime.Now, Random.Shared);
 
-        if (App.IsAutoRun && ShouldStartForAutoRun(DateTime.Now))
+        if (App.UdpResumeRequest is null && App.IsAutoRun && ShouldStartForAutoRun(DateTime.Now))
             QueueAutoStart();
 
         if (MuteOnStart && (!MuteOnlyOnAutoRun || App.IsAutoRun))

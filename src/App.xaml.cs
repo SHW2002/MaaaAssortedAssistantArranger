@@ -5,8 +5,9 @@ namespace Game_Daily_Routine_Launcher;
 public partial class App : Application
 {
     public static bool IsAutoRun { get; private set; }
+    public static UdpElevationRequest? UdpResumeRequest { get; private set; }
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
@@ -23,7 +24,24 @@ public partial class App : Application
 
         IsAutoRun = e.Args.Contains("--autorun", StringComparer.OrdinalIgnoreCase);
 
-        if (ShouldExitSilentlyForAutoRun())
+        try
+        {
+            UdpResumeRequest = UdpElevationRequest.Parse(e.Args);
+            if (UdpResumeRequest is not null)
+            {
+                UdpProxyPaths.RequireAdministrator();
+                await UdpElevationService.WaitForParentExitAsync(UdpResumeRequest.ParentProcessId);
+            }
+        }
+        catch (Exception ex)
+        {
+            RuntimeLogService.WriteException("恢复 UDP 提权操作失败", ex);
+            MessageBox.Show(ex.Message, "恢复 UDP 操作失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Shutdown();
+            return;
+        }
+
+        if (UdpResumeRequest is null && ShouldExitSilentlyForAutoRun())
         {
             RuntimeLogService.WriteMessage("自动运行启动，但当前不在允许的定时启动窗口，程序静默退出。");
             Shutdown();
@@ -32,6 +50,8 @@ public partial class App : Application
 
         MainWindow = new MainWindow();
         MainWindow.Show();
+        if (UdpResumeRequest is not null && MainWindow.DataContext is MainViewModel vm)
+            await vm.ResumeUdpOperationAsync(UdpResumeRequest);
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -8,8 +8,6 @@ public partial class MainViewModel
     private async Task StartAllAsync()
     {
         SaveConfig();
-        IsRunning = true;
-
         var enabledTasks = Tasks.Where(t => t.Enabled).Select(t => t.ToConfig()).ToList();
         if (enabledTasks.Count == 0)
         {
@@ -17,6 +15,11 @@ public partial class MainViewModel
             IsRunning = false;
             return;
         }
+
+        if (UdpElevationService.NeedsElevation(enabledTasks, UdpProxyPaths.IsAdministrator) &&
+            RequestUdpElevation(UdpElevationRequest.StartAll))
+            return;
+        IsRunning = true;
 
         var shouldMuteOnStart = MuteOnStart && (!MuteOnlyOnAutoRun || App.IsAutoRun);
         if (shouldMuteOnStart)
@@ -96,6 +99,9 @@ public partial class MainViewModel
             return;
 
         SaveConfig();
+        if (UdpElevationService.NeedsElevation([taskVm.ToConfig()], UdpProxyPaths.IsAdministrator) &&
+            RequestUdpElevation(UdpElevationRequest.StartSingle, Tasks.IndexOf(taskVm)))
+            return;
         IsRunning = true;
         taskVm.State = TaskState.Running;
         AddLog($"单独启动 {taskVm.Name}...");

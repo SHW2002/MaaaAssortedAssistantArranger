@@ -4,6 +4,7 @@ public partial class MainViewModel
 {
     private void QueueAutoStart()
     {
+        _hasRunInCurrentWindow = true;
         _autoSummaryRequested = true;
         StartAllCommand.Execute(null);
     }
