@@ -6,12 +6,13 @@
         xmlns:local="clr-namespace:Game_Daily_Routine_Launcher"
         xmlns:views="clr-namespace:Game_Daily_Routine_Launcher.Views"
         mc:Ignorable="d"
-        Title="Maaa Assorted Assistant Arranger"
-        Icon="/res/icon.ico"
+        Title="{x:Static local:ApplicationInfo.WindowTitle}"
+        Icon="/MaaaAssortedAssistantArranger;component/res/icon.ico"
         Width="840"
         MinHeight="700"
         MinWidth="640"
-        Background="#FAFAFA"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextPrimary}"
         SizeToContent="Height"
         WindowStartupLocation="Manual">
     <Window.DataContext>
@@ -30,16 +31,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" Margin="0,0,0,12">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Image Source="/res/icon.ico" Width="28" Height="28" Margin="0,0,8,0" />
-                <TextBlock Text="Maaa Assorted Assistant Arranger" FontSize="18" FontWeight="SemiBold" Foreground="#212121" VerticalAlignment="Center" />
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="启动全部" Style="{StaticResource ActionButton}" Command="{Binding StartAllCommand}" Margin="0,0,8,0" />
-                <Button Content="停止全部" Style="{StaticResource StopButton}" Command="{Binding StopAllCommand}" Margin="0,0,8,0" />
-            </StackPanel>
-        </DockPanel>
+        <views:HeaderView Grid.Row="0" />
 
         <GroupBox Grid.Row="1" Header="任务列表" Padding="8">
             <ScrollViewer MinHeight="124"
@@ -66,7 +58,7 @@
                                             <CheckBox Grid.Column="1" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,8,0" />
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontSize="13" />
-                                                <TextBlock Text="{Binding ValidationMessage}" FontSize="11" Foreground="#EF5350" Visibility="{Binding HasValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <TextBlock Text="{Binding ValidationMessage}" FontSize="11" Foreground="{DynamicResource ErrorBrush}" Visibility="{Binding HasValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="3" Text="{Binding StateText}" Foreground="{Binding State, Converter={StaticResource TaskStateToColor}}" FontSize="12" VerticalAlignment="Center" Margin="8,0" />
                                             <Button Grid.Column="4" Content="启动" Style="{StaticResource SmallButton}" Command="{Binding DataContext.StartSingleCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
@@ -84,7 +76,7 @@
                                             </Button>
                                             <Button Grid.Column="6" Content="删除" Style="{StaticResource DangerSmallButton}" Click="OnDeleteTaskClicked" IsEnabled="{Binding DataContext.CanEditTasks, RelativeSource={RelativeSource AncestorType=Window}}" />
                                         </Grid>
-                                        <Border Margin="0,8,0,0" Padding="8" Background="#F5F5F5" CornerRadius="4" Visibility="{Binding IsConfigExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Border Margin="0,8,0,0" Padding="8" Background="{DynamicResource InsetBackground}" CornerRadius="4" Visibility="{Binding IsConfigExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
@@ -139,7 +131,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <ListBox Grid.Row="0" ItemsSource="{Binding LogEntries}" x:Name="LogListBox" MinHeight="84" MaxHeight="160" FontFamily="Consolas" FontSize="12" BorderThickness="0" Background="White" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="False" MouseDoubleClick="OnLogListBoxMouseDoubleClick">
+                <ListBox Grid.Row="0" ItemsSource="{Binding LogEntries}" x:Name="LogListBox" MinHeight="84" MaxHeight="160" FontFamily="Consolas" FontSize="12" BorderThickness="0" Background="{DynamicResource SurfaceBackground}" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.CanContentScroll="False" MouseDoubleClick="OnLogListBoxMouseDoubleClick">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" LineHeight="16" LineStackingStrategy="BlockLineHeight" />
@@ -186,10 +178,10 @@
                 </StackPanel>
                 <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="{Binding TestTwinkleTrayButtonText}" Style="{StaticResource SmallButton}" Command="{Binding TestTwinkleTrayCommand}" HorizontalAlignment="Left" />
-                    <TextBlock Text="{Binding TwinkleTrayAvailabilityMessage}" VerticalAlignment="Center" Foreground="#757575" TextWrapping="Wrap" Margin="8,0,0,0" />
+                    <TextBlock Text="{Binding TwinkleTrayAvailabilityMessage}" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="8,0,0,0" />
                 </StackPanel>
                 <CheckBox Grid.Row="3" Grid.Column="0" Content="运行前关闭 FlClash" IsChecked="{Binding CloseFlClashBeforeRun}" IsEnabled="{Binding CanEditTasks}" VerticalAlignment="Center" Margin="0,4,12,0" ToolTip="启动时及每个子任务开始前检测并关闭，任务结束后恢复原先运行的 FlClash。" />
-                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="启动时及每个子任务前检测，结束后恢复" VerticalAlignment="Center" Foreground="#757575" />
+                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="启动时及每个子任务前检测，结束后恢复" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
                 <CheckBox Grid.Row="2" Grid.Column="0" Content="全部完成后关机" IsChecked="{Binding ShutdownOnComplete}" VerticalAlignment="Center" Margin="0,4,12,0" />
                 <CheckBox Grid.Row="2" Grid.Column="1" Content="仅在自动运行时生效" IsChecked="{Binding ShutdownOnlyOnAutoRun}" VerticalAlignment="Center" Margin="0,4,12,0" />
                 <TextBlock Grid.Row="2" Grid.Column="2" />
@@ -200,27 +192,7 @@
 
         <views:PushSettingsView Grid.Row="6" />
 
-        <GroupBox Grid.Row="7" Header="设置" Padding="8" Margin="0,8,0,0">
-            <WrapPanel>
-                <TextBlock Text="定时启动时间:" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <TextBox Text="{Binding ScheduledHour, StringFormat={}{0:D2}}" Width="35" Margin="0,0,2,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                <TextBlock Text="时" VerticalAlignment="Center" Margin="0,0,2,0" />
-                <TextBox Text="{Binding ScheduledMinute, StringFormat={}{0:D2}}" Width="35" Margin="0,0,4,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                <TextBlock Text="分" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <TextBox Text="{Binding ScheduledEndHour, StringFormat={}{0:D2}}" Width="35" Margin="0,0,2,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                <TextBlock Text="时" VerticalAlignment="Center" Margin="0,0,2,0" />
-                <TextBox Text="{Binding ScheduledEndMinute, StringFormat={}{0:D2}}" Width="35" Margin="0,0,16,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                <TextBlock Text="分" VerticalAlignment="Center" Margin="0,0,16,0" />
-                <CheckBox Content="随机时间启动" IsChecked="{Binding RandomStartEnabled}" VerticalAlignment="Center" Margin="0,0,16,0" />
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0" Visibility="{Binding IsSchedulePolling, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Ellipse Width="8" Height="8" Fill="#FF9800" Margin="0,0,6,0" />
-                    <TextBlock Text="轮询中" FontSize="12" Foreground="#757575" VerticalAlignment="Center" />
-                </StackPanel>
-                <TextBlock Text="轮询间隔(秒):" VerticalAlignment="Center" Margin="0,0,4,0" />
-                <TextBox Text="{Binding PollIntervalSeconds}" Width="50" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-                <CheckBox Content="开机自动启动" IsChecked="{Binding AutoRunOnStart}" VerticalAlignment="Center" Margin="16,0,0,0" />
-            </WrapPanel>
-        </GroupBox>
+        <views:GeneralSettingsView Grid.Row="7" />
     </Grid>
     </ScrollViewer>
 </Window>

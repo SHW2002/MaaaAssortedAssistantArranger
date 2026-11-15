@@ -6,12 +6,13 @@
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="#FAFAFA">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource TextPrimary}">
     <Window.Resources>
-        <Style x:Key="RelayPreviewTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Background" Value="#F3F4F6" />
-            <Setter Property="BorderBrush" Value="#D0D0D0" />
-            <Setter Property="Foreground" Value="#555555" />
+        <Style x:Key="RelayPreviewTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Background" Value="{DynamicResource InsetBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
             <Setter Property="IsReadOnly" Value="True" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
@@ -28,7 +29,7 @@
 
         <TextBlock Text="Webhook 中转只需要替换企业微信机器人的请求 URL，Body 保持原样。"
                    TextWrapping="Wrap"
-                   Foreground="#212121" />
+                   Foreground="{DynamicResource TextPrimary}" />
 
         <TextBlock Grid.Row="1" Text="原 URL 示例" Margin="0,16,0,4" FontWeight="SemiBold" />
         <TextBox Grid.Row="2"
@@ -54,7 +55,7 @@
 
         <TextBlock Grid.Row="5"
                    Margin="0,12,0,0"
-                   Foreground="#616161"
+                   Foreground="{DynamicResource TextSecondary}"
                    Text="程序会监听当前端口，收到该路径后自动转发到真实企业微信地址，并记录实际 URL 与 Body。"
                    TextWrapping="Wrap" />
     </Grid>

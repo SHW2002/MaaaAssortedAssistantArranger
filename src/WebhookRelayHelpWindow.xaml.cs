@@ -7,6 +7,7 @@ public partial class WebhookRelayHelpWindow : Window
     public WebhookRelayHelpWindow()
     {
         InitializeComponent();
+        ThemeService.ObserveWindow(this);
         DataContext ??= new WebhookRelayHelpViewModel();
     }
 

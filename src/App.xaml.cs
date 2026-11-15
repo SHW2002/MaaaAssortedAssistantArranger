@@ -48,6 +48,7 @@ public partial class App : Application
             return;
         }
 
+        ThemeService.Initialize(new ConfigService().Load().Theme);
         MainWindow = new MainWindow();
         MainWindow.Show();
         if (UdpResumeRequest is not null && MainWindow.DataContext is MainViewModel vm)
@@ -56,6 +57,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        ThemeService.Dispose();
         RuntimeLogService.WriteMessage($"程序退出，退出码：{e.ApplicationExitCode}。");
         base.OnExit(e);
     }

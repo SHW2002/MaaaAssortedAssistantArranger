@@ -2,6 +2,7 @@ namespace Game_Daily_Routine_Launcher;
 
 public class AppConfig
 {
+    public ThemeMode Theme { get; set; } = ThemeMode.System;
     public List<GameTaskConfig> Tasks { get; set; } = [];
     public AiSummaryConfig AiSummary { get; set; } = new();
     public ScreenRecordingConfig ScreenRecording { get; set; } = new();

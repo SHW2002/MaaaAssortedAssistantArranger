@@ -4,6 +4,7 @@ public partial class MainViewModel
 {
     private void SaveConfig()
     {
+        _appConfig.Theme = Theme;
         _appConfig.Tasks = Tasks.Select(t => t.ToConfig()).ToList();
         _appConfig.CloseFlClashBeforeRun = CloseFlClashBeforeRun;
         _appConfig.MuteOnStart = MuteOnStart;

@@ -16,6 +16,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ThemeService.ObserveWindow(this);
 
         ((INotifyCollectionChanged)LogListBox.Items).CollectionChanged += (_, _) =>
         {

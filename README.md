@@ -13,6 +13,7 @@ A Windows desktop hub for running daily game assistants in sequence, monitoring 
 - Send configurable webhook notifications, or relay assistant webhooks to collect richer execution logs.
 - Generate AI summaries through configurable providers, with separate HTTP proxy settings per provider.
 - Record task execution and export logs.
+- Switch between system, light, and dark appearance, with live updates and a saved preference. The title bar shows the installed version.
 - Enable **UDP proxying per task**, using a bundled component built from open-source networking code; see [UDP proxy setup](docs/udp-proxy.md).
 - Optionally shut down Windows after successful completion.
 
@@ -21,6 +22,8 @@ A Windows desktop hub for running daily game assistants in sequence, monitoring 
 Download a Windows x64 package from [Releases](https://github.com/SHthemW/MaaaAssortedAssistantArranger/releases), extract the whole archive, and run `MaaaAssortedAssistantArranger.exe`. Framework-dependent packages require the .NET 8 Desktop and ASP.NET Core runtimes.
 
 The first launch creates `appsettings.Local.json` beside the executable. UI changes are saved automatically. To migrate settings, close MAAA and copy this file to the new program directory. The file contains service credentials; keep it private.
+
+Choose **跟随系统 / 浅色 / 深色** under **设置 → 主题**. Existing configurations default to following the Windows app theme; manual selection takes effect immediately, including the title bar and help window.
 
 ### Task settings
 

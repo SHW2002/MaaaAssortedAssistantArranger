@@ -60,6 +60,7 @@ public partial class MainViewModel
 
     private void LoadBasicConfig()
     {
+        Theme = Enum.IsDefined(_appConfig.Theme) ? _appConfig.Theme : ThemeMode.System;
         CloseFlClashBeforeRun = _appConfig.CloseFlClashBeforeRun;
         MuteOnStart = _appConfig.MuteOnStart;
         MuteOnlyOnAutoRun = _appConfig.MuteOnlyOnAutoRun;

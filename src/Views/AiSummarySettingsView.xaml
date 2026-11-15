@@ -154,7 +154,7 @@
                 <StackPanel Orientation="Horizontal" Margin="90,8,0,0">
                     <Button Content="测试" Style="{StaticResource SmallButton}" Command="{Binding TestAiSummaryCommand}" IsEnabled="{Binding CanRunAiSummaryTest}" />
                     <Button Content="使用最近日志测试" Style="{StaticResource SmallButton}" Command="{Binding TestAiSummaryWithRecentLogCommand}" IsEnabled="{Binding CanRunRecentAiSummaryTest}" Margin="8,0,0,0" />
-                    <TextBlock Text="{Binding AiSummaryTestStatus}" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#757575" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding AiSummaryTestStatus}" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>
         </StackPanel>
