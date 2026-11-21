@@ -1,0 +1,17 @@
+<UserControl x:Class="Game_Daily_Routine_Launcher.Views.TaskLogMonitoringSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Margin="0,8,0,0"
+                IsEnabled="{Binding DataContext.CanEditTasks, RelativeSource={RelativeSource AncestorType=Window}}">
+        <CheckBox Content="日志监听模式" IsChecked="{Binding LogMonitoringEnabled}" />
+        <StackPanel Margin="0,6,0,0" Visibility="{Binding LogMonitoringEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="无日志超时（分钟）" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBox Text="{Binding LogInactivityTimeoutMinutes, UpdateSourceTrigger=PropertyChanged}"
+                         Width="80" VerticalContentAlignment="Center" />
+            </StackPanel>
+            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"
+                       Text="使用现有 Webhook 中转接收日志。超过设定时间未收到日志时，MAAA 会强制终止当前任务。" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

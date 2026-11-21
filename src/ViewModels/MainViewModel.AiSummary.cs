@@ -218,6 +218,7 @@ public partial class MainViewModel
             TaskState.MonitoringWaitStop => "等待结束监控",
             TaskState.Completed => "已完成",
             TaskState.TimedOut => "已超时",
+            TaskState.Terminated => "已终止",
             TaskState.Error => "出错",
             _ => "未知"
         };

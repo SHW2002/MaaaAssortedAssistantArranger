@@ -18,8 +18,7 @@ public class TaskStateToColorConverter : IValueConverter
                 TaskState.MonitoringWaitStart => new SolidColorBrush(Color.FromRgb(255, 167, 38)),
                 TaskState.MonitoringWaitStop => new SolidColorBrush(Color.FromRgb(255, 167, 38)),
                 TaskState.Completed => new SolidColorBrush(Color.FromRgb(102, 187, 106)),
-                TaskState.TimedOut => new SolidColorBrush(Color.FromRgb(239, 83, 80)),
-                TaskState.Error => new SolidColorBrush(Color.FromRgb(239, 83, 80)),
+                TaskState.TimedOut or TaskState.Error or TaskState.Terminated => new SolidColorBrush(Color.FromRgb(239, 83, 80)),
                 _ => new SolidColorBrush(Color.FromRgb(158, 158, 158))
             };
         }

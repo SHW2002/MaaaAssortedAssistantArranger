@@ -32,9 +32,10 @@ public partial class MainViewModel
         foreach (var task in Tasks)
             task.State = TaskState.Idle;
 
-        _chainRunner = CreateTaskChainRunner();
-        _chainRunner.LogMessage += msg => AddLog(msg);
-        _chainRunner.TaskStateChanged += (id, state) =>
+        var runner = CreateTaskChainRunner();
+        _chainRunner = runner;
+        runner.LogMessage += msg => AddLog(msg);
+        runner.TaskStateChanged += (id, state) =>
         {
             ExecuteOnUiThread(() =>
             {
@@ -50,15 +51,17 @@ public partial class MainViewModel
         _autoSummaryRequested = false;
 
         var completed = false;
+        var reachedEnd = false;
         try
         {
-            completed = await _chainRunner.RunChainAsync(enabledTasks, shouldMuteOnStart);
+            completed = await runner.RunChainAsync(enabledTasks, shouldMuteOnStart);
+            reachedEnd = runner.ReachedEnd;
         }
         finally
         {
             if (screenRecordingStarted)
                 await StopScreenRecordingAsync();
-            _chainRunner.Dispose();
+            runner.Dispose();
             _chainRunner = null;
             IsRunning = false;
         }
@@ -66,19 +69,30 @@ public partial class MainViewModel
         if (RestoreVolumeOnCompletion || RestoreBrightnessOnCompletion)
             await RestoreConfiguredStateAsync();
 
-        AddLog(completed ? "任务链执行完成。" : "任务链已停止。");
-
-        if (completed && AiSummaryEnabled)
-            await GenerateAndLogAiSummaryAsync(autoSummaryRequested);
-
-        if (completed && WebhookOnlyPushAiSummary && !AiSummaryEnabled)
-            _ = PushWebhookAsync("未开启AI总结服务", null, DateTime.Now.ToString("HH:mm:ss"));
+        await PublishChainResultAsync(reachedEnd, completed, autoSummaryRequested);
 
         if (completed && ShutdownOnComplete && (!ShutdownOnlyOnAutoRun || autoSummaryRequested))
         {
             AddLog("所有任务已完成，10秒后关机。");
             SystemService.Shutdown();
         }
+    }
+
+    private async Task PublishChainResultAsync(bool reachedEnd, bool completed, bool autoSummaryRequested)
+    {
+        if (!reachedEnd)
+        {
+            AddLog("任务链已停止。");
+            return;
+        }
+
+        var resultPush = AppendLog(CreateLogEntry(completed ? "任务链执行完成。" : "任务链执行结束，部分任务未成功。"));
+        if (AiSummaryEnabled)
+            await GenerateAndLogAiSummaryAsync(autoSummaryRequested);
+        else if (WebhookOnlyPushAiSummary)
+            await PushFinalAiSummaryWebhookAsync("未开启AI总结服务", null);
+
+        await resultPush;
     }
 
     [RelayCommand(CanExecute = nameof(CanStopAll))]
@@ -132,5 +146,8 @@ public partial class MainViewModel
             _chainRunner = null;
             IsRunning = false;
         }
+
+        if (runner.ReachedEnd && taskVm.State is TaskState.TimedOut or TaskState.Terminated)
+            await PublishChainResultAsync(reachedEnd: true, completed: false, autoSummaryRequested: false);
     }
 }

@@ -34,12 +34,15 @@ Each task's **配置** button opens its settings:
 | Task name | Human-readable name used in logs and notifications. |
 | Tool path | Executable path, or a registered URI such as `bettergi://startOneDragon`. |
 | Arguments | Arguments passed to executable launches. |
-| Monitored process | Process name, with or without `.exe`; the task waits for it to appear and exit. An empty value completes immediately after launch, except when UDP proxying is enabled. |
+| Monitored process | Process name, with or without `.exe`. The task waits for it to appear and exit. If left empty, the task completes after launch unless log monitoring is enabled. UDP proxying requires a monitored process. |
 | Delay | Milliseconds to wait before launching the task. |
 | Timeout | Maximum minutes to wait for the monitored process. A failed or timed-out task does not prevent subsequent tasks from running. |
+| Log monitoring | Off by default. The inactivity window defaults to 10 minutes. Each external log received by the shared Webhook relay restarts the current task's window. If the window expires first, MAAA force-stops the task and continues the chain. |
 | UDP proxy | Off by default. Game presets select target processes automatically; other tasks follow the monitored process. Optional exact `.exe` filenames override automatic selection. Configure an unauthenticated SOCKS5 endpoint. Administrator privileges and the Windows Packet Filter driver are required. |
 
-Only enabled tasks participate in a chain. A failed task makes the chain unsuccessful, preventing success-only shutdown and summaries.
+Log monitoring uses the existing Webhook relay address. Because the relay does not receive a task identifier, incoming logs during a run count toward the currently running task. With no monitored process, MAAA waits for the launched process to exit. If a launcher, including a URI handler, provides no active process when termination is needed, MAAA uses the configured monitored process name.
+
+Only enabled tasks participate in a chain. When the queue finishes, notification and summary settings apply even if the final task timed out or was terminated. Automatic shutdown still requires all tasks to succeed.
 
 For Star Rail, leave **自定义(可空)** empty: the preset targets `StarRail.exe` automatically. The monitored process can be `StarRail`, and the upstream is the actual FlClash SOCKS5/mixed port, for example `127.0.0.1:7890`. **生效进程** previews the exact targets. Keep FlClash running and disable **运行前关闭 FlClash** for this setup.
 

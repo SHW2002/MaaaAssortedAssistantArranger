@@ -19,13 +19,16 @@ public partial class MainViewModel
 
     private void AddLog(string message, string? rawBody = null, bool pushWebhook = true)
     {
-        var entry = new LogEntryRecord(DateTime.Now, message)
+        var entry = CreateLogEntry(message, rawBody);
+        ExecuteOnUiThread(() => _ = AppendLog(entry, pushWebhook));
+    }
+
+    private static LogEntryRecord CreateLogEntry(string message, string? rawBody = null) =>
+        new(DateTime.Now, message)
         {
             RawBody = rawBody,
             Category = InferWebhookPushCategory(message, rawBody)
         };
-        ExecuteOnUiThread(() => AppendLog(entry, pushWebhook));
-    }
 
     private static WebhookPushContentCategory InferWebhookPushCategory(string message, string? rawBody)
     {
@@ -101,7 +104,7 @@ public partial class MainViewModel
         (WebhookPushContentCategory.Other, "其他日志")
     ];
 
-    private void AppendLog(LogEntryRecord entry, bool pushWebhook = true)
+    private Task AppendLog(LogEntryRecord entry, bool pushWebhook = true)
     {
         LogEntries.Add(entry);
         RuntimeLogService.WriteEntry(entry);
@@ -110,8 +113,9 @@ public partial class MainViewModel
         if (!string.IsNullOrWhiteSpace(entry.RawBody))
             Console.WriteLine(entry.RawBody);
 
-        if (pushWebhook && ShouldPushLogEntry(entry))
-            _ = PushWebhookAsync(entry.Message, entry.RawBody, entry.Timestamp.ToString("HH:mm:ss"));
+        return pushWebhook && ShouldPushLogEntry(entry)
+            ? PushWebhookAsync(entry.Message, entry.RawBody, entry.Timestamp.ToString("HH:mm:ss"))
+            : Task.CompletedTask;
     }
 
     private bool ShouldPushLogEntry(LogEntryRecord entry)

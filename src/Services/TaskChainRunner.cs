@@ -7,6 +7,7 @@ public partial class TaskChainRunner : IDisposable
     private readonly IUdpProxyService _udpProxy;
     private CancellationTokenSource? _cts;
     private TaskCompletionSource? _completion;
+    private TaskLogWatchdog? _logWatchdog;
     private bool _disposed;
 
     public Action<IReadOnlyList<GameTaskConfig>>? ValidateTasks { get; init; }
@@ -15,6 +16,8 @@ public partial class TaskChainRunner : IDisposable
     public event Action<string, string>? TaskStateChanged;
     public event Action<string>? LogMessage;
     public bool IsRunning { get; private set; }
+    public bool ReachedEnd { get; private set; }
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
     public TaskChainRunner(AudioService audio, int pollIntervalMs = 60000,
         IUdpProxyService? udpProxy = null, ITaskProcessService? processes = null)
@@ -32,6 +35,8 @@ public partial class TaskChainRunner : IDisposable
         _cts = new CancellationTokenSource();
         _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         IsRunning = true;
+        ReachedEnd = false;
+        var reachedEnd = false;
         var failed = false;
         try
         {
@@ -48,6 +53,7 @@ public partial class TaskChainRunner : IDisposable
                 _cts.Token.ThrowIfCancellationRequested();
                 if (!await RunSingleTaskAsync(task, _cts.Token)) failed = true;
             }
+            reachedEnd = true;
         }
         catch (OperationCanceledException)
         {
@@ -72,6 +78,7 @@ public partial class TaskChainRunner : IDisposable
             }
             finally
             {
+                ReachedEnd = reachedEnd && !_cts.IsCancellationRequested;
                 IsRunning = false;
                 _completion.TrySetResult();
                 if (_disposed) _cts.Dispose();
@@ -92,6 +99,8 @@ public partial class TaskChainRunner : IDisposable
     }
 
     private void Log(string message) => LogMessage?.Invoke(message);
+
+    internal void ReportTaskLog() => Volatile.Read(ref _logWatchdog)?.ReportActivity();
 
     public void Dispose()
     {

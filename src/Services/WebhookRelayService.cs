@@ -18,6 +18,7 @@ public sealed class WebhookRelayService : IDisposable
 
     public bool IsRunning => _host is not null;
     public int Port { get; private set; }
+    internal event Action? TaskLogReceived;
 
     public async Task<WebhookRelayResult> StartAsync(int port, string sourceUrl, Func<string, string?, Task>? logAsync = null)
     {
@@ -129,6 +130,8 @@ public sealed class WebhookRelayService : IDisposable
             using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
             var forwardedBody = await reader.ReadToEndAsync();
 
+            if (!string.IsNullOrWhiteSpace(forwardedBody))
+                TaskLogReceived?.Invoke();
             await logAsync($"Webhook 中转接收：url={url}", forwardedBody);
             await logAsync("Webhook 中转已根据原请求 URL 映射真实地址，并原样转发请求 Body。", forwardedBody);
 

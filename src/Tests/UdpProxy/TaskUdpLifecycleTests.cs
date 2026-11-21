@@ -69,6 +69,7 @@ public class TaskUdpLifecycleTests
         runner.TaskStateChanged += (_, state) => states.Add(state);
         Assert.False(await runner.RunChainAsync([TaskFakes.Config()], false));
         Assert.Contains("TimedOut", states);
+        Assert.True(runner.ReachedEnd);
         Assert.Contains("proxy-stopped", fake.Events);
     }
 
@@ -85,6 +86,7 @@ public class TaskUdpLifecycleTests
         fake.AllowDispose.SetResult();
         await stop.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(await run);
+        Assert.False(runner.ReachedEnd);
         Assert.Contains("proxy-stopped", fake.Events);
     }
 

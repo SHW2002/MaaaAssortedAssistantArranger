@@ -1,6 +1,6 @@
 namespace Game_Daily_Routine_Launcher.Tests;
 
-internal sealed class TaskFakes : IUdpProxyService, ITaskProcessService, IUdpProxySession
+internal sealed class TaskFakes : IUdpProxyService, ITaskProcessService, ITaskProcessSession, IUdpProxySession
 {
     public List<string> Events { get; } = [];
     public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -25,12 +25,23 @@ internal sealed class TaskFakes : IUdpProxyService, ITaskProcessService, IUdpPro
         return this;
     }
 
-    public void Launch(GameTaskConfig task)
+    public ITaskProcessSession Launch(GameTaskConfig task)
     {
         Events.Add("launch");
         if (FailLaunch) throw new InvalidOperationException("Simulated launcher failure");
         Launched.TrySetResult();
+        return this;
     }
+
+    public Task WaitForExitAsync(CancellationToken cancellationToken) => ProcessExit.Task.WaitAsync(cancellationToken);
+
+    public Task TerminateAsync()
+    {
+        Events.Add("terminate");
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() { }
 
     public async Task WaitForExitAsync(GameTaskConfig task, Action onStarted, CancellationToken cancellationToken)
     {

@@ -44,6 +44,12 @@ public partial class GameTaskViewModel : ObservableObject
     private int _timeoutMinutes;
 
     [ObservableProperty]
+    private bool _logMonitoringEnabled;
+
+    [ObservableProperty]
+    private int _logInactivityTimeoutMinutes;
+
+    [ObservableProperty]
     private TaskState _state = TaskState.Idle;
 
     [ObservableProperty]
@@ -64,6 +70,7 @@ public partial class GameTaskViewModel : ObservableObject
         TaskState.MonitoringWaitStop => "监控中·等待关闭",
         TaskState.Completed => "已完成",
         TaskState.TimedOut => "已超时",
+        TaskState.Terminated => "已终止",
         TaskState.Error => "出错",
         _ => "未知"
     };
@@ -79,6 +86,8 @@ public partial class GameTaskViewModel : ObservableObject
         _launchMode = config.LaunchMode;
         _delayBeforeStartMs = config.DelayBeforeStartMs;
         _timeoutMinutes = config.TimeoutMinutes;
+        _logMonitoringEnabled = config.LogMonitoringEnabled;
+        _logInactivityTimeoutMinutes = config.LogInactivityTimeoutMinutes;
         LoadUdpProxy(config.UdpProxy);
 
         Validate();
@@ -100,6 +109,10 @@ public partial class GameTaskViewModel : ObservableObject
 
     partial void OnLaunchModeChanged(LaunchMode value) => Validate();
 
+    partial void OnLogMonitoringEnabledChanged(bool value) => Validate();
+
+    partial void OnLogInactivityTimeoutMinutesChanged(int value) => Validate();
+
     private void Validate()
     {
         if (LaunchMode == LaunchMode.Uri)
@@ -120,6 +133,8 @@ public partial class GameTaskViewModel : ObservableObject
             else
                 ClearValidation();
         }
+        if (!HasValidationError && LogMonitoringEnabled && !GameTaskConfig.IsValidLogInactivityTimeout(LogInactivityTimeoutMinutes))
+            SetValidation(GameTaskConfig.LogInactivityTimeoutError);
         if (!HasValidationError)
             ValidateUdpProxy();
     }
@@ -167,6 +182,8 @@ public partial class GameTaskViewModel : ObservableObject
         _config.LaunchMode = LaunchMode;
         _config.DelayBeforeStartMs = DelayBeforeStartMs;
         _config.TimeoutMinutes = TimeoutMinutes;
+        _config.LogMonitoringEnabled = LogMonitoringEnabled;
+        _config.LogInactivityTimeoutMinutes = LogInactivityTimeoutMinutes;
         _config.UdpProxy = BuildUdpProxyConfig();
         return _config;
     }

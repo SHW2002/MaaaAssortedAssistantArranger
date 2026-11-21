@@ -5,7 +5,7 @@ namespace Game_Daily_Routine_Launcher;
 
 public sealed class TaskProcessService(int pollIntervalMs) : ITaskProcessService
 {
-    public void Launch(GameTaskConfig task)
+    public ITaskProcessSession Launch(GameTaskConfig task)
     {
         var psi = new ProcessStartInfo { UseShellExecute = true };
         if (task.LaunchMode == LaunchMode.Uri)
@@ -19,14 +19,12 @@ public sealed class TaskProcessService(int pollIntervalMs) : ITaskProcessService
             psi.WorkingDirectory = Path.GetDirectoryName(fullPath);
             psi.Arguments = task.ToolArgs;
         }
-        using var process = Process.Start(psi);
+        return new TaskProcessSession(Process.Start(psi), GetProcessName(task));
     }
 
     public async Task WaitForExitAsync(GameTaskConfig task, Action onStarted, CancellationToken cancellationToken)
     {
-        var name = task.GameProcessName.Trim();
-        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
-        using var monitor = new ProcessMonitor(name, task.UdpProxy.Enabled ? 500 : pollIntervalMs);
+        using var monitor = new ProcessMonitor(GetProcessName(task), task.UdpProxy.Enabled ? 500 : pollIntervalMs);
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         monitor.ProcessStarted += onStarted;
         monitor.ProcessExited += () => completion.TrySetResult();
@@ -34,5 +32,11 @@ public sealed class TaskProcessService(int pollIntervalMs) : ITaskProcessService
         monitor.Start();
         try { await completion.Task; }
         finally { await monitor.StopAsync(); }
+    }
+
+    private static string GetProcessName(GameTaskConfig task)
+    {
+        var name = task.GameProcessName?.Trim() ?? string.Empty;
+        return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
 }

@@ -42,7 +42,7 @@ public partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _startupMuteTimer;
     private readonly DispatcherTimer _startupTwinkleTrayTimer;
     private AppConfig _appConfig;
-    private TaskChainRunner? _chainRunner;
+    private volatile TaskChainRunner? _chainRunner;
     private bool _isLoading;
     private bool _hasMuteSnapshot;
     private bool _didAutoMute;
@@ -117,6 +117,7 @@ public partial class MainViewModel : ObservableObject
         _aiPromptLogService = new AiPromptLogService();
         _twinkleTrayService = new TwinkleTrayService();
         _webhookRelayService = new WebhookRelayService();
+        _webhookRelayService.TaskLogReceived += () => _chainRunner?.ReportTaskLog();
         _screenRecordingService = new ScreenRecordingService();
         _screenRecordingService.RecordingFailed += message =>
             AddLog($"录屏失败：{message}");
