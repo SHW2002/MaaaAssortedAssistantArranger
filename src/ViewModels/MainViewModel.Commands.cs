@@ -1,4 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Input;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 
@@ -111,6 +113,20 @@ public partial class MainViewModel
     }
 
     [RelayCommand]
+    private void OpenLogFolder()
+    {
+        try
+        {
+            var folder = Directory.CreateDirectory(RuntimeLogService.LogDirectory);
+            using var process = Process.Start(new ProcessStartInfo(folder.FullName) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Win32Exception)
+        {
+            AddLog($"打开日志文件夹失败：{ex.Message}", pushWebhook: false);
+        }
+    }
+
+    [RelayCommand]
     private async Task ExportLogsAsync()
     {
         if (LogEntries.Count == 0)
@@ -119,7 +135,7 @@ public partial class MainViewModel
             return;
         }
 
-        var logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+        var logDir = RuntimeLogService.LogDirectory;
         Directory.CreateDirectory(logDir);
 
         var path = Path.Combine(logDir, $"runtime-{DateTime.Now:yyyyMMdd-HHmmss}.log");

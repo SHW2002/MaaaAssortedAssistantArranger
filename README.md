@@ -60,6 +60,8 @@ AI settings include provider, API key and URL, model, prompts, thinking, tempera
 
 ### Logs
 
+Click **打开日志文件夹** (Open Log Folder) in the run log panel to open the log folder in File Explorer.
+
 Session logs are saved to `logs/session-*.log`, AI prompts to `logs/aiprompt-*.log`, and exported logs to `logs/runtime-*.log`. Session and prompt logs are retained for five days by default.
 
 ## Development

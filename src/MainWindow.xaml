@@ -148,6 +148,7 @@
                     </Grid.ColumnDefinitions>
                     <CheckBox Grid.Column="0" Content="自动滚动日志" IsChecked="{Binding AutoScrollLogs}" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="打开日志文件夹" Style="{StaticResource SmallButton}" Command="{Binding OpenLogFolderCommand}" Margin="0,0,8,0" />
                         <Button Content="导出" Style="{StaticResource SmallButton}" Command="{Binding ExportLogsCommand}" Margin="0,0,8,0" />
                         <Button Content="清除" Style="{StaticResource SmallButton}" Command="{Binding ClearLogsCommand}" />
                     </StackPanel>

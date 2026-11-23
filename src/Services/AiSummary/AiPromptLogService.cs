@@ -9,12 +9,7 @@ public sealed class AiPromptLogService
     private const string FilePrefix = "aiprompt-";
     private const string LegacyFileName = "aiprompt.log";
     private const string TimestampFormat = "yyyyMMdd-HHmmss-fff";
-    private readonly string _logDir;
-
-    public AiPromptLogService()
-    {
-        _logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-    }
+    private readonly string _logDir = RuntimeLogService.LogDirectory;
 
     public async Task WriteAsync(string prompt, CancellationToken cancellationToken = default)
     {

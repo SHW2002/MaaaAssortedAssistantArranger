@@ -14,6 +14,8 @@ public static class RuntimeLogService
     private static readonly object SyncRoot = new();
     private static string? _currentLogFilePath;
 
+    internal static string LogDirectory { get; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+
     public static string? CurrentLogFilePath => _currentLogFilePath;
 
     public static void Initialize()
@@ -25,7 +27,7 @@ public static class RuntimeLogService
 
             try
             {
-                var logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+                var logDir = LogDirectory;
                 Directory.CreateDirectory(logDir);
 
                 _currentLogFilePath = CreateSessionLogPath(logDir);
