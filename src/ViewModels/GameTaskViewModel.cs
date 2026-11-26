@@ -32,6 +32,9 @@ public partial class GameTaskViewModel : ObservableObject
     private string _gameProcessName;
 
     [ObservableProperty]
+    private string _relatedProcessNames;
+
+    [ObservableProperty]
     private bool _enabled;
 
     [ObservableProperty]
@@ -82,6 +85,7 @@ public partial class GameTaskViewModel : ObservableObject
         _toolPath = config.ToolPath;
         _toolArgs = config.ToolArgs;
         _gameProcessName = config.GameProcessName;
+        _relatedProcessNames = config.RelatedProcessNames ?? string.Empty;
         _enabled = config.Enabled;
         _launchMode = config.LaunchMode;
         _delayBeforeStartMs = config.DelayBeforeStartMs;
@@ -178,6 +182,7 @@ public partial class GameTaskViewModel : ObservableObject
         _config.ToolPath = ToolPath;
         _config.ToolArgs = ToolArgs;
         _config.GameProcessName = GameProcessName;
+        _config.RelatedProcessNames = RelatedProcessNames;
         _config.Enabled = Enabled;
         _config.LaunchMode = LaunchMode;
         _config.DelayBeforeStartMs = DelayBeforeStartMs;

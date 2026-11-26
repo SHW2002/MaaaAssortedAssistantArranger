@@ -34,13 +34,14 @@ Each task's **配置** button opens its settings:
 | Task name | Human-readable name used in logs and notifications. |
 | Tool path | Executable path, or a registered URI such as `bettergi://startOneDragon`. |
 | Arguments | Arguments passed to executable launches. |
-| Monitored process | Process name, with or without `.exe`. The task waits for it to appear and exit. If left empty, the task completes after launch unless log monitoring is enabled. UDP proxying requires a monitored process. |
+| Monitored process | Process name, with or without `.exe`. The task waits for it to appear and exit. UDP proxying requires a monitored process. |
+| Processes to close (**结束时关闭**) | Comma- or semicolon-separated names, with optional `.exe` suffixes. At task completion, timeout, or stop, MAAA closes the launched assistant if still running and all processes matching these names. Built-in tasks prefill their game or emulator. Clear the field to remove all additional targets. |
 | Delay | Milliseconds to wait before launching the task. |
-| Timeout | Maximum minutes to wait for the monitored process. A failed or timed-out task does not prevent subsequent tasks from running. |
+| Timeout | Maximum minutes to wait for the monitored process, or for the launched program when only additional cleanup is configured. The chain continues after a timeout or cleanup error. |
 | Log monitoring | Off by default. The inactivity window defaults to 10 minutes. Each external log received by the shared Webhook relay restarts the current task's window. If the window expires first, MAAA force-stops the task and continues the chain. |
 | UDP proxy | Off by default. Game presets select target processes automatically; other tasks follow the monitored process. Optional exact `.exe` filenames override automatic selection. Configure an unauthenticated SOCKS5 endpoint. Administrator privileges and the Windows Packet Filter driver are required. |
 
-Log monitoring uses the existing Webhook relay address. Because the relay does not receive a task identifier, incoming logs during a run count toward the currently running task. With no monitored process, MAAA waits for the launched process to exit. If a launcher, including a URI handler, provides no active process when termination is needed, MAAA uses the configured monitored process name.
+Log monitoring uses the existing Webhook relay address. Because the relay does not receive a task identifier, incoming logs during a run count toward the currently running task. With the monitored process field blank, MAAA waits for the launched process to exit when log monitoring or additional cleanup is configured. Otherwise it completes the task after launch. For a URI that opens an existing assistant instance, set a monitored process to track completion and include the assistant's process name in the cleanup list if it should close.
 
 Only enabled tasks participate in a chain. When the queue finishes, notification and summary settings apply even if the final task timed out or was terminated. Automatic shutdown still requires all tasks to succeed.
 

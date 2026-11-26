@@ -14,9 +14,13 @@ public partial class TaskChainRunner
         ct.ThrowIfCancellationRequested();
         TaskStateChanged?.Invoke(task.Id, "Launching");
         IUdpProxySession? proxy = null;
+        ITaskProcessSession? launched = null;
         Task? monitor = null;
         TaskLogWatchdog? watchdog = null;
         var state = TaskState.Completed;
+        var hasMonitoredProcess = !string.IsNullOrWhiteSpace(task.GameProcessName);
+        var hasRelatedProcesses = TaskProcessNames.ForCleanup(task.RelatedProcessNames).Length > 0;
+        var tracksCompletion = hasMonitoredProcess || hasRelatedProcesses || task.LogMonitoringEnabled;
         using var monitorCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
@@ -31,10 +35,11 @@ public partial class TaskChainRunner
                 Log($"UDP 代理已就绪，仅匹配：{string.Join(", ", UdpProxyRules.Validate(task))}。");
             }
             ct.ThrowIfCancellationRequested();
-            var hasMonitoredProcess = !string.IsNullOrWhiteSpace(task.GameProcessName);
+            if (hasMonitoredProcess || (hasRelatedProcesses && !task.LogMonitoringEnabled))
+                monitorCts.CancelAfter(TimeSpan.FromMinutes(task.TimeoutMinutes));
+
             if (hasMonitoredProcess)
             {
-                monitorCts.CancelAfter(TimeSpan.FromMinutes(task.TimeoutMinutes));
                 TaskStateChanged?.Invoke(task.Id, "MonitoringWaitStart");
                 monitor = _processes.WaitForExitAsync(task, () =>
                 {
@@ -51,11 +56,11 @@ public partial class TaskChainRunner
                 Volatile.Write(ref _logWatchdog, watchdog);
             }
 
-            using var launched = _processes.Launch(task);
+            launched = _processes.Launch(task);
             if (monitor is null) TaskStateChanged?.Invoke(task.Id, "Running");
-            if (watchdog is not null) monitor ??= launched.WaitForExitAsync(monitorCts.Token);
-            if (monitor is not null)
+            if (tracksCompletion)
             {
+                monitor ??= launched.WaitForExitAsync(monitorCts.Token);
                 var signals = new List<Task> { monitor };
                 if (proxy is not null) signals.Add(proxy.Exited);
                 if (watchdog is not null) signals.Add(watchdog.Expired);
@@ -64,10 +69,7 @@ public partial class TaskChainRunner
 
                 if (finished == watchdog?.Expired)
                 {
-                    monitorCts.Cancel();
                     Log($"任务 {task.Name} 连续 {task.LogInactivityTimeoutMinutes} 分钟未收到日志，正在强制终止。");
-                    await launched.TerminateAsync();
-                    Log($"任务 {task.Name} 已终止。");
                     state = TaskState.Terminated;
                 }
                 else
@@ -99,6 +101,22 @@ public partial class TaskChainRunner
             {
                 try { await monitor; }
                 catch (Exception) { /* The task result was already reported above. */ }
+            }
+            using (launched)
+            {
+                if (launched is not null && tracksCompletion)
+                {
+                    try
+                    {
+                        await launched.TerminateAsync();
+                        if (state == TaskState.Terminated) Log($"任务 {task.Name} 已终止。");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"清理 {task.Name} 的进程失败：{ex.Message}");
+                        if (state is TaskState.Completed or TaskState.Terminated) state = TaskState.Error;
+                    }
+                }
             }
             if (proxy is not null)
             {

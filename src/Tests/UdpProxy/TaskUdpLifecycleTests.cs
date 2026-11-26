@@ -25,7 +25,7 @@ public class TaskUdpLifecycleTests
         fake.ProcessExit.SetResult();
         using var runner = fake.Runner();
         Assert.True(await runner.RunChainAsync([TaskFakes.Config(false)], false));
-        Assert.Equal(new[] { "monitor", "monitor-ended", "launch" }, fake.Events);
+        Assert.Equal(new[] { "monitor", "monitor-ended", "launch", "terminate" }, fake.Events);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class TaskUdpLifecycleTests
         fake.ProcessExit.SetResult();
         Assert.True(await run.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(new[] { "proxy-start", "proxy-ready", "monitor", "launch", "monitor-ended",
-            "proxy-stop", "proxy-stopped" }, fake.Events);
+            "terminate", "proxy-stop", "proxy-stopped" }, fake.Events);
     }
 
     [Theory]
@@ -70,6 +70,7 @@ public class TaskUdpLifecycleTests
         Assert.False(await runner.RunChainAsync([TaskFakes.Config()], false));
         Assert.Contains("TimedOut", states);
         Assert.True(runner.ReachedEnd);
+        Assert.Contains("terminate", fake.Events);
         Assert.Contains("proxy-stopped", fake.Events);
     }
 
@@ -83,6 +84,7 @@ public class TaskUdpLifecycleTests
         var stop = runner.StopAsync();
         await fake.Disposing.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(stop.IsCompleted);
+        Assert.Contains("terminate", fake.Events);
         fake.AllowDispose.SetResult();
         await stop.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(await run);

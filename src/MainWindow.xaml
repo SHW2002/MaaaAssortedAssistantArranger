@@ -86,6 +86,7 @@
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
                                                 </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="80" />
@@ -101,11 +102,16 @@
                                                 <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding ToolArgs, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Margin="0,0,0,4" />
                                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="监控进程:" VerticalAlignment="Center" Margin="0,0,0,4" />
                                                 <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding GameProcessName, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Margin="0,0,0,4" />
-                                                <TextBlock Grid.Row="4" Grid.Column="0" Text="延迟(毫秒):" VerticalAlignment="Center" Margin="0,0,0,4" />
-                                                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding DelayBeforeStartMs, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Width="80" HorizontalAlignment="Left" Margin="0,0,0,4" />
-                                                <TextBlock Grid.Row="5" Grid.Column="0" Text="超时(分钟):" VerticalAlignment="Center" />
-                                                <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding TimeoutMinutes, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Width="80" HorizontalAlignment="Left" />
-                                                <StackPanel Grid.Row="6" Grid.ColumnSpan="3">
+                                                <TextBlock Grid.Row="4" Grid.Column="0" Text="结束时关闭:" VerticalAlignment="Center" Margin="0,0,0,4" />
+                                                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding RelatedProcessNames, UpdateSourceTrigger=PropertyChanged}"
+                                                         AutomationProperties.Name="结束时关闭的进程" ToolTip="填写进程名，多个用逗号或分号分隔，可省略 .exe 后缀。"
+                                                         IsEnabled="{Binding DataContext.CanEditTasks, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                         VerticalContentAlignment="Center" Margin="0,0,0,4" />
+                                                <TextBlock Grid.Row="5" Grid.Column="0" Text="延迟(毫秒):" VerticalAlignment="Center" Margin="0,0,0,4" />
+                                                <TextBox Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding DelayBeforeStartMs, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Width="80" HorizontalAlignment="Left" Margin="0,0,0,4" />
+                                                <TextBlock Grid.Row="6" Grid.Column="0" Text="超时(分钟):" VerticalAlignment="Center" />
+                                                <TextBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding TimeoutMinutes, UpdateSourceTrigger=PropertyChanged}" VerticalContentAlignment="Center" Width="80" HorizontalAlignment="Left" />
+                                                <StackPanel Grid.Row="7" Grid.ColumnSpan="3">
                                                     <views:TaskLogMonitoringSettingsView />
                                                     <views:TaskUdpProxySettingsView />
                                                 </StackPanel>

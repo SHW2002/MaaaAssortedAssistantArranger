@@ -9,8 +9,7 @@ public static class UdpProxyProcessResolver
         if (!string.IsNullOrWhiteSpace(task.UdpProxy.ProcessNames))
             return new(SplitNames(task.UdpProxy.ProcessNames), "自定义覆盖");
 
-        var monitor = task.GameProcessName?.Trim() ?? string.Empty;
-        if (monitor.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) monitor = monitor[..^4];
+        var monitor = TaskProcessNames.WithoutExeExtension(task.GameProcessName);
         var preset = FindPreset(task.Id, task.Name, monitor);
         return preset switch
         {

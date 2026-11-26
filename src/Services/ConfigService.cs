@@ -30,7 +30,9 @@ public class ConfigService
         var json = File.ReadAllText(_configPath);
         var config = JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ?? CreateDefault();
         var aiSummaryConfigMigrated = config.AiSummary.MigrateLegacyCommonConfig();
-        if (LegacyBatchTaskImporter.TryApply(config, _appDir) || aiSummaryConfigMigrated)
+        var legacyTasksImported = LegacyBatchTaskImporter.TryApply(config, _appDir);
+        var cleanupDefaultsApplied = TaskProcessCleanupDefaults.Apply(config.Tasks);
+        if (legacyTasksImported || aiSummaryConfigMigrated || cleanupDefaultsApplied)
             Save(config);
 
         return config;
@@ -90,6 +92,7 @@ public class ConfigService
         };
 
         LegacyBatchTaskImporter.TryApply(config, _appDir);
+        TaskProcessCleanupDefaults.Apply(config.Tasks);
         Save(config);
         return config;
     }

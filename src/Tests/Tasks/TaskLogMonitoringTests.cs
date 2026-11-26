@@ -34,7 +34,7 @@ public class TaskLogMonitoringTests
     }
 
     [Fact]
-    public async Task ExitBeforeDeadlineCompletesWithoutTermination()
+    public async Task ExitBeforeDeadlineCompletesWithCleanup()
     {
         var fake = new TaskFakes();
         using var runner = fake.Runner();
@@ -44,7 +44,7 @@ public class TaskLogMonitoringTests
         fake.ProcessExit.SetResult();
 
         Assert.True(await run.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.DoesNotContain("terminate", fake.Events);
+        Assert.Equal(new[] { "launch", "terminate" }, fake.Events);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class TaskLogMonitoringTests
             UseShellExecute = false,
             CreateNoWindow = true
         })!;
-        using var session = new TaskProcessSession(process, string.Empty);
+        using var session = new TaskProcessSession(process, string.Empty, []);
         try
         {
             await session.TerminateAsync();

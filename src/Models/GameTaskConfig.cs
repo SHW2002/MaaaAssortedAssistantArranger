@@ -18,6 +18,7 @@ public class GameTaskConfig
     public string ToolPath { get; set; } = string.Empty;
     public string ToolArgs { get; set; } = string.Empty;
     public string GameProcessName { get; set; } = string.Empty;
+    public string? RelatedProcessNames { get; set; }
     public bool Enabled { get; set; } = true;
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
